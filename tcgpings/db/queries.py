@@ -31,19 +31,20 @@ async def upsert_retailer(
     color: int | None = None,
     requests_per_minute: int | None = None,
     proxy_policy: str | None = None,
+    enabled: bool = True,
 ) -> None:
     """Create a retailer, or refresh its adapter/name/config. Operator-tuned fields are kept."""
     await db.execute(
         """
-        INSERT INTO retailers (id, adapter, name, config, color, requests_per_minute, proxy_policy)
-        VALUES ($1, $2, $3, $4, $5, coalesce($6, 30), coalesce($7, 'direct'))
+        INSERT INTO retailers (id, adapter, name, config, color, requests_per_minute, proxy_policy, enabled)
+        VALUES ($1, $2, $3, $4, $5, coalesce($6, 30), coalesce($7, 'direct'), $8)
         ON CONFLICT (id) DO UPDATE SET
             adapter = EXCLUDED.adapter,
             name = EXCLUDED.name,
             config = retailers.config || EXCLUDED.config,
             color = coalesce(EXCLUDED.color, retailers.color)
         """,
-        retailer_id, adapter, name, config or {}, color, requests_per_minute, proxy_policy,
+        retailer_id, adapter, name, config or {}, color, requests_per_minute, proxy_policy, enabled,
     )
 
 
@@ -312,6 +313,16 @@ async def apply_state(
             prev and prev["price_cents"], price_cents,
         )
     return prev
+
+
+async def seconds_since_store_check(db: DB, retailer_id: str, sku: str) -> float | None:
+    return await db.fetchval(
+        """
+        SELECT extract(epoch FROM now() - max(updated_at))::float8 FROM product_state
+        WHERE retailer_id = $1 AND sku = $2 AND store_id <> ''
+        """,
+        retailer_id, sku,
+    )
 
 
 async def product_states(db: DB, retailer_id: str, sku: str) -> list[asyncpg.Record]:

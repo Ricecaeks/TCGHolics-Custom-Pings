@@ -150,3 +150,17 @@ async def test_outbox_claim_send_and_retry(pool):
     await queries.mark_alert_sent(pool, again["id"])
     assert await queries.claim_alerts(pool, "n1", 10) == []
     assert (await queries.outbox_backlog(pool))["pending"] == 0
+
+
+async def test_browser_retailers_are_seeded_disabled_and_operator_choice_sticks(pool):
+    from types import SimpleNamespace
+
+    from tcgpings.app import seed_retailers
+
+    ctx = SimpleNamespace(pool=pool)
+    await seed_retailers(ctx)
+    farmers = await queries.get_retailer(pool, "farmers")
+    assert farmers["enabled"] is False and farmers["requests_per_minute"] == 10
+    await queries.update_retailer(pool, "farmers", enabled=True)
+    await seed_retailers(ctx)  # a restart must not switch it back off
+    assert (await queries.get_retailer(pool, "farmers"))["enabled"] is True

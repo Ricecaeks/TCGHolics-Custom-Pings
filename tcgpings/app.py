@@ -19,6 +19,7 @@ from tcgpings.db.pool import create_pool, migrate
 from tcgpings.discord.sender import sender_loop
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
+from tcgpings.net.browser import BrowserFetcher
 from tcgpings.net.http import HttpClient
 from tcgpings.net.proxies import ProxyPool
 from tcgpings.retailers import REGISTRY
@@ -35,6 +36,10 @@ async def build_context(settings: Settings) -> Context:
         await queries.proxy_failed(pool, proxy, 600)
 
     http = HttpClient(ProxyPool(settings.proxies), on_ban=on_ban)
+    http.browser = BrowserFetcher(
+        settings.browser_profile_dir, http.limiter, settings.browser_headless,
+        settings.browser_channel, settings.browser_idle_seconds,
+    )
     routes = RouteCache(pool)
     return Context(
         settings=settings,
@@ -50,7 +55,10 @@ async def build_context(settings: Settings) -> Context:
 async def seed_retailers(ctx: Context) -> None:
     for cls in REGISTRY.values():
         for retailer_id, name, config, color in cls.default_retailers:
-            await queries.upsert_retailer(ctx.pool, retailer_id, cls.adapter_name, name, config, color)
+            await queries.upsert_retailer(
+                ctx.pool, retailer_id, cls.adapter_name, name, config, color,
+                cls.default_requests_per_minute, enabled=cls.default_enabled,
+            )
 
 
 async def run(settings: Settings) -> None:

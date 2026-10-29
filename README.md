@@ -1,6 +1,6 @@
 # TCGHolics Custom Pings
 
-Watches NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lorcana, Yu-Gi-Oh!) and posts alerts to the [TCGHolics](https://tcgholics.co.nz) Discord. Alerts are routed per retailer and per physical store. For example, a stock change for Pokémon 30th Booster Bundles at Farmers Westgate goes to `#farmers-westgate`.
+Monitors NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lorcana, Yu-Gi-Oh!) and posts alerts to the [TCGHolics](https://tcgholics.co.nz) Discord. Alerts are routed per retailer and per physical store. For example, a stock change for Pokémon 30th Booster Bundles at Farmers Westgate goes to `#farmers-westgate`.
 
 **Alert types:** new listing · restock · stock-quantity increase · price change · out of stock (opt-in)
 
@@ -21,8 +21,21 @@ Every node runs the same container. Nodes coordinate only through Postgres:
 
 ## Quick start
 
-1. Follow **[docs/SETUP.md](docs/SETUP.md)**: create the Discord app, set up Supabase and prepare each NUC.
-2. On each NUC:
+**One PC or laptop (current setup).** This runs Postgres and one monitor node, capped at 2 CPU threads and 2 GB of RAM:
+
+1. Copy `.env.example` to `.env` and fill in the Discord values (see [docs/SETUP.md](docs/SETUP.md) §1). `DATABASE_URL` isn't needed here.
+2. Start the stack:
+
+   ```bash
+   docker compose -f deploy/docker-compose.local.yml up -d --build
+   ```
+
+**[docs/HOSTING.md](docs/HOSTING.md)** covers resource use, gaming-friendly limits, the always-on laptop with auto-deploy, cloud options and how each retailer's bot protection is handled.
+
+**Several machines (cluster):**
+
+1. Follow **[docs/SETUP.md](docs/SETUP.md)** to set up Supabase and each machine.
+2. On each machine:
 
    ```bash
    docker compose -f deploy/docker-compose.yml up -d --build

@@ -41,7 +41,8 @@ def plan_jobs(
             if w["retailer_id"] not in by_id:
                 continue
             key = sku_job_key(w["retailer_id"], w["query"])
-            interval = w["interval_seconds"] or sku_interval
+            cls = REGISTRY[by_id[w["retailer_id"]]["adapter"]]
+            interval = w["interval_seconds"] or cls.default_sku_interval or sku_interval
             existing = jobs.get(key)
             if existing:
                 existing["payload"]["store_ids"] = _merge_stores(existing["payload"]["store_ids"], w["store_ids"])
@@ -60,7 +61,8 @@ def plan_jobs(
             if retailer_id not in by_id:
                 continue
             key = f"search:{retailer_id}:{query}:{w['franchise'] or '*'}"
-            interval = w["interval_seconds"] or search_interval
+            cls = REGISTRY[by_id[retailer_id]["adapter"]]
+            interval = w["interval_seconds"] or cls.default_search_interval or search_interval
             existing = jobs.get(key)
             if existing:
                 existing["payload"]["store_ids"] = _merge_stores(existing["payload"]["store_ids"], w["store_ids"])

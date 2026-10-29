@@ -1,20 +1,22 @@
 # Retailers
 
-Recon notes for each retailer. An adapter is only marked **live** once it has been checked against the real site and has fixture tests.
+Recon notes for each retailer. An adapter is only marked **live** once it has been checked against the real site and has fixture tests. Bot protection per retailer, store counts and the access approach for each are compared in [HOSTING.md §5](HOSTING.md#5-retailers-what-to-monitor-and-how-to-get-in).
 
 | Retailer | Adapter | Store-level stock | Status |
 |---|---|---|---|
 | Shopify card shops (any) | `shopify` | — (online only) | **live** |
-| Farmers | `farmers` | yes (expected) | recon pending: phase 2 |
-| The Warehouse | `warehouse` | yes (expected) | recon pending: phase 3 |
-| Kmart NZ | `kmart` | yes (expected) | recon pending: phase 3 |
-| Noel Leeming | `noelleeming` | yes (expected) | recon pending: phase 3 |
-| JB Hi-Fi NZ | `jbhifi` | to confirm | recon pending: phase 4 |
-| EB Games NZ | `ebgames` | to confirm | recon pending: phase 4 |
-| Mighty Ape | `mightyape` | — (online only) | recon pending: phase 4 |
-| Toyworld | `toyworld` | to confirm | recon pending: phase 4 |
-| Whitcoulls | `whitcoulls` | to confirm | recon pending: phase 4 |
-| Paper Plus | `paperplus` | to confirm | recon pending: phase 4 |
+| Farmers | `farmers` | yes: In / Not in stock, 53 stores | adapter built and tested on fixtures; **live access blocked by Akamai**, retailer disabled by default (see below) |
+| The Warehouse | `warehouse` | yes (expected) | recon pending |
+| Noel Leeming | `noelleeming` | yes (expected) | recon pending |
+| Warehouse Stationery | `warehousestationery` | yes (expected) | recon pending (Cloudflare challenge) |
+| Kmart NZ | `kmart` | yes (expected) | recon pending (Akamai) |
+| Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
+| JB Hi-Fi NZ | `jbhifi` | to confirm | recon pending |
+| Toyworld | `toyworld` / `shopify` | to confirm | recon pending (Shopify) |
+| Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
+| Whitcoulls | `whitcoulls` | to confirm | recon pending |
+| Paper Plus | `paperplus` | to confirm | recon pending |
+| ~~EB Games NZ~~ | — | — | dropped: stores have closed |
 
 ## Shopify (generic)
 
@@ -27,6 +29,30 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - Stock is IN/OUT only, because Shopify doesn't expose inventory counts publicly.
 - When a single card's title doesn't name the game, the game is taken from the product type or tags.
 - Verified live on 2026-10-29 against cardmerchant.co.nz and ironknightgaming.co.nz.
+
+## Farmers (recon 2026-10-29)
+
+**Platform:** Intershop (cookies `pgid-Farmers-Shop-Site`, `sid`, `SecureSessionID-*`), behind **Akamai Bot Manager** (`_abck`, `bm_sz`). Search is powered by Constructor.io.
+
+| Purpose | Request | Response |
+|---|---|---|
+| Product | `GET /<category path>/<slug>-<SKU>` (SKU = trailing 7 digits, e.g. `7044417`) | HTML with JSON-LD `Product`: name, image, sku, gtin14, `offers.price`, `offers.availability` (online stock) |
+| Store stock | `GET /INTERSHOP/web/WFS/Farmers-Shop-Site/en_NZ/-/NZD/ViewCheckoutShipping-GetAvailableStoresAjax?CountryCode=NZ&NoShippingFilter=true&SKU=<sku>&State=<region>` | HTML fragment; each `.panel-heading` holds `.store__name span` and `.store-stock` (`In Stock` / `Not In Stock`). One call per region, so **13 calls cover every store** |
+| Store modal | `POST …/ViewProduct-GetStoreModal?SKU=<sku>` | the region picker (not needed) |
+| New listings | category `/toys/games-cards-puzzles/trading-cards` | product tiles link to the product URLs |
+| Search | `/search?SearchTerm=<q>` (HTML), backed by Constructor.io | not used yet: calling Constructor's API directly needs a decision (see below) |
+
+- **Regions** (`State`): NTL, AUK, WKO, BOP, GIS, TKI, MWT, HKB, WGN, NSN, CAN, OTA, STL.
+- **Stores are identified by name only.** There's no store ID. The full list of 53 is in [`tcgpings/retailers/data/farmers_stores.json`](../tcgpings/retailers/data/farmers_stores.json). **Westgate is listed as "Northwest"** (NorthWest Shopping Centre, Massey). "Home by Farmers" homewares stores don't stock cards and aren't returned.
+- **In-store stock refreshes once a day.** The modal says "Stock updated at 8am this morning", so polling store stock more than hourly is pointless. Online stock (JSON-LD) is live.
+- **Stock levels:** only "In Stock" and "Not In Stock" were seen. No counts.
+
+**Access:** decided to use a real browser (option 1). The adapter (`tcgpings/retailers/farmers.py`) calls the endpoints above with `fetch()` from inside a real Chrome page, using `net/browser.py`: Patchright driving Google Chrome, headed (Xvfb in Docker), with a persistent profile per retailer.
+
+- **Schedule:** online stock is checked every 15 min. Store stock is checked every 4 h; it only refreshes daily, and each check is 13 region calls.
+- **Request budget:** 10 requests/min.
+- **Not passing Akamai yet.** Plain `curl_cffi` got 2 answers, then 403s. Every automated browser variant was denied as well. Only a real browser with an aged cookie passed. The full table and next steps are in [HOSTING.md §6](HOSTING.md#6-farmers-status-and-next-steps).
+- **Disabled by default:** the `farmers` retailer stays off until enabled with `/retailer set retailer:farmers enabled:true`.
 
 ## Recon checklist for a new retailer
 

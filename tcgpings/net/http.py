@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 BAN_STATUSES = {403, 429}
 BAN_MARKERS = re.compile(
-    r"captcha|cf-chl|challenge-platform|access denied|px-block|perimeterx|are you a robot", re.I
+    r"captcha|cf-chl|challenge-platform|access denied|px-block|perimeterx|are you a robot|WAF_Deny_Page", re.I
 )
 PROXY_BAN_SECONDS = 600
 
@@ -54,6 +54,8 @@ class HttpClient:
         self._on_ban = on_ban
         self._impersonate = impersonate
         self._session: AsyncSession | None = None
+        # Set by the app when browser-backed adapters are available (see net/browser.py).
+        self.browser = None
 
     async def __aenter__(self) -> HttpClient:
         return self
@@ -68,6 +70,8 @@ class HttpClient:
         return self._session
 
     async def close(self) -> None:
+        if self.browser is not None:
+            await self.browser.close()
         if self._session is not None:
             await self._session.close()
             self._session = None

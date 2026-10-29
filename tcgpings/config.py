@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     egress_ip: str = ""
     egress_lookup_url: str = "https://api.ipify.org"
 
+    # Real-browser fetching for sites behind Akamai/DataDome (Farmers, Kmart, ...). Headed Chrome is
+    # far less detectable than headless; in Docker it renders into a virtual display (Xvfb).
+    browser_headless: bool = False
+    browser_channel: str = "chrome"
+    browser_profile_dir: str = "data/browser"
+    browser_idle_seconds: int = 600
+
     worker_concurrency: int = 8
     lease_seconds: int = 120
     heartbeat_seconds: int = 15

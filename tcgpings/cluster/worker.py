@@ -93,6 +93,12 @@ class Worker:
         ids = list(names) if wanted is None else [i for i in wanted if i in names]
         return ids, names
 
+    async def _store_check_due(self, adapter: Any, sku: str) -> bool:
+        if not adapter.store_stock_interval:
+            return True
+        age = await queries.seconds_since_store_check(self.ctx.pool, adapter.retailer_id, sku)
+        return age is None or age >= adapter.store_stock_interval
+
     async def _watch_sku(self, job: Any) -> None:
         payload = job["payload"]
         retailer = await self.ctx.adapters.retailer(job["retailer_id"])
@@ -102,7 +108,7 @@ class Worker:
             return
         product = products[0]
         stock, names = None, None
-        if adapter.supports_store_stock:
+        if adapter.supports_store_stock and await self._store_check_due(adapter, product.sku):
             ids, names = await self._store_ids(job["retailer_id"], payload.get("store_ids"))
             if ids:
                 stock = await adapter.store_stock(product.sku, ids)
@@ -133,7 +139,7 @@ class Worker:
                     sku_job_key(job["retailer_id"], product.sku),
                     job["retailer_id"],
                     {"sku": product.sku, "store_ids": payload.get("store_ids"), "watch_ids": payload["watch_ids"]},
-                    self.ctx.settings.default_sku_interval,
+                    adapter.default_sku_interval or self.ctx.settings.default_sku_interval,
                     payload["watch_ids"][0],
                 )
         log.debug("%s search %r: %d results, %d kept", job["retailer_id"], payload["query"], len(results), kept)

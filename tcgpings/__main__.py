@@ -40,7 +40,14 @@ async def _probe(args: argparse.Namespace) -> None:
     }
     from tcgpings.net.proxies import ProxyPool
 
+    from tcgpings.config import Settings
+    from tcgpings.net.browser import BrowserFetcher
+
+    settings = Settings()
     async with HttpClient(ProxyPool([args.proxy] if args.proxy else [])) as http:
+        http.browser = BrowserFetcher(
+            settings.browser_profile_dir, http.limiter, settings.browser_headless, settings.browser_channel
+        )
         adapter = build_adapter(row, http)
         started = time.monotonic()
         if args.action == "search":

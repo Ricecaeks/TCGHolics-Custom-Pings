@@ -19,8 +19,19 @@ class RetailerAdapter(ABC):
 
     adapter_name: ClassVar[str]
     supports_store_stock: ClassVar[bool] = False
+    # Minimum seconds between store-level checks of one product (0 = every run). Retailers whose
+    # store stock only refreshes daily don't need hammering every minute.
+    store_stock_interval: ClassVar[int] = 0
     # Retailer rows created automatically at startup: (id, name, config, color).
     default_retailers: ClassVar[list[tuple[str, str, dict, int | None]]] = []
+    # Whether those rows start enabled. Retailers that need special access (real browser,
+    # proxies) start disabled so they're only hit once someone turns them on.
+    default_enabled: ClassVar[bool] = True
+    # Cluster-wide request budget given to those rows when first created.
+    default_requests_per_minute: ClassVar[int | None] = None
+    # Check intervals when a watch doesn't set one (None = the global defaults in Settings).
+    default_sku_interval: ClassVar[int | None] = None
+    default_search_interval: ClassVar[int | None] = None
 
     def __init__(self, retailer: Any, http: HttpClient) -> None:
         self.retailer_id: str = retailer["id"]
