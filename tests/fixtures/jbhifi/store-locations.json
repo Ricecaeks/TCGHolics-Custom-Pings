@@ -1,0 +1,147 @@
+{
+ "hits": [
+  {
+   "shopId": 9,
+   "isActive": false,
+   "locationType": "Store",
+   "storeName": "DO NOT USE",
+   "storeAddress": {
+    "Line1": ".",
+    "Suburb": ".",
+    "Postcode": "."
+   },
+   "phone": "09 8154648"
+  },
+  {
+   "shopId": 7,
+   "isActive": true,
+   "locationType": "Warehouse",
+   "storeName": "NZ - BULKY FAULTY GOODS - DO NOT USE",
+   "storeAddress": {
+    "Line1": "9a Mahunga Drive",
+    "Suburb": "Mangere Bridge",
+    "Postcode": "2022"
+   },
+   "phone": "092690508"
+  },
+  {
+   "shopId": 46,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "Pop Up",
+   "storeAddress": {
+    "Line1": "JBHIFI Support Office",
+    "Line2": "7 link Drive",
+    "Suburb": "Wairau Park",
+    "Postcode": "0627",
+    "Country": "NZ"
+   },
+   "phone": ""
+  },
+  {
+   "shopId": 42,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "Westgate",
+   "storeAddress": {
+    "Line1": "14/33-47 NORTHSIDE DRIVE",
+    "Line3": "",
+    "Suburb": "Westgate",
+    "Postcode": "0814",
+    "Country": "NZ"
+   },
+   "phone": "09 960 4200"
+  },
+  {
+   "shopId": 4,
+   "isActive": false,
+   "locationType": "Store",
+   "storeName": "JB Hi-Fi Westgate",
+   "storeAddress": {
+    "Line1": "Westgate Mega Centre",
+    "Line2": "1 Hobsonville Rd",
+    "Suburb": "Hobsonville",
+    "Postcode": "0618"
+   },
+   "phone": "09 831 2005"
+  },
+  {
+   "shopId": 32,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "Auckland International Airport",
+   "storeAddress": {
+    "Line1": "International Airport (Aelia Duty Free)",
+    "Line2": "Ray Emery Drive, Mangere",
+    "Suburb": "Auckland",
+    "Postcode": "2022"
+   },
+   "phone": "09 5903201"
+  },
+  {
+   "shopId": 3,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "OOT",
+   "storeAddress": {
+    "Line1": "DO NOT USE",
+    "Suburb": "DO NOT USE",
+    "Postcode": "3000"
+   },
+   "phone": "09 956 0700"
+  },
+  {
+   "shopId": 27,
+   "isActive": true,
+   "locationType": "Warehouse",
+   "storeName": "NZ RETAIL WAREHOUSE",
+   "storeAddress": {
+    "Line1": "9a Mahunga Drive",
+    "Suburb": "Mangere Bridge",
+    "Postcode": "2022"
+   },
+   "phone": "09 956 0700"
+  },
+  {
+   "shopId": 25,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "Sylvia Park",
+   "storeAddress": {
+    "Line1": "Sylvia Park Shopping Centre",
+    "Line2": "T17, 286 Mt Wellington Highway",
+    "Line3": "",
+    "Suburb": "Mount Wellington, North Island",
+    "Postcode": "1060"
+   },
+   "phone": "099560300"
+  },
+  {
+   "shopId": 14,
+   "isActive": true,
+   "locationType": "Store",
+   "storeName": "Albany",
+   "storeAddress": {
+    "Line1": "Westfield Albany Shopping Centre Level 1",
+    "Line2": "219 Don McKinnon Drive",
+    "Line3": "",
+    "Suburb": "Albany, North Island",
+    "Postcode": "0632"
+   },
+   "phone": "099569400"
+  },
+  {
+   "shopId": 1,
+   "isActive": true,
+   "locationType": "HeadOffice",
+   "storeName": "JBRL",
+   "storeAddress": {
+    "Line1": "LEVEL 1, 7 LINK DRIVE",
+    "Suburb": "WAIRAU PARK",
+    "Postcode": "0627"
+   },
+   "phone": "09 8154610"
+  }
+ ],
+ "nbHits": 11
+}

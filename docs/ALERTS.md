@@ -68,7 +68,7 @@ For retailers with store stock (JB Hi-Fi today, Farmers once its browser access 
 
 | Retailer | New listings | Online stock | Price | Per-store stock | Add-to-cart |
 |---|---|---|---|---|---|
-| JB Hi-Fi | ✅ | ✅ | ✅ | ✅ (store names pending) | ✅ |
+| JB Hi-Fi | ✅ | ✅ | ✅ | ✅ 27 stores | ✅ |
 | Farmers | ✅ (via Constructor) | ✅ | — | — (needs browser access) | — |
 | Shopify card shops | ✅ | ✅ | ✅ | — | ✅ |
 | The Warehouse, Kmart, … | coming | | | | |

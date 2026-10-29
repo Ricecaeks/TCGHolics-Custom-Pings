@@ -1,0 +1,168 @@
+{
+  "_source": "JB Hi-Fi NZ Algolia index shopify_store_locations (public store-locator key, approved by TCGHolics), 2026-10-29",
+  "_note": "Retail stores only (active Store/Home locations). Ids match AvailabilityInStore.InStockStoreIds on product pages.",
+  "stores": [
+    {
+      "store_id": "2",
+      "name": "Queen St - Auckland CBD",
+      "region": "Auckland City, North Island",
+      "phone": "099560100"
+    },
+    {
+      "store_id": "5",
+      "name": "Lynnmall",
+      "region": "New Lynn, North Island",
+      "phone": "099560500"
+    },
+    {
+      "store_id": "13",
+      "name": "Manukau",
+      "region": "Manukau, North Island",
+      "phone": "099569300"
+    },
+    {
+      "store_id": "14",
+      "name": "Albany",
+      "region": "Albany, North Island",
+      "phone": "099569400"
+    },
+    {
+      "store_id": "18",
+      "name": "Te Awa - The Base",
+      "region": "Hamilton, North Island",
+      "phone": "07 9814400"
+    },
+    {
+      "store_id": "20",
+      "name": "Wellington",
+      "region": "Wellington, North Island",
+      "phone": "04 832 5900"
+    },
+    {
+      "store_id": "21",
+      "name": "Botany",
+      "region": "Botany Downs, North Island",
+      "phone": "099560200"
+    },
+    {
+      "store_id": "22",
+      "name": "Palmerston North",
+      "region": "Palmerston North, North Island",
+      "phone": "065909600"
+    },
+    {
+      "store_id": "23",
+      "name": "Bayfair",
+      "region": "Mt Maunganui, North Island",
+      "phone": "079872900"
+    },
+    {
+      "store_id": "24",
+      "name": "Dunedin",
+      "region": "Dunedin, South Island",
+      "phone": "037426400"
+    },
+    {
+      "store_id": "25",
+      "name": "Sylvia Park",
+      "region": "Mount Wellington, North Island",
+      "phone": "099560300"
+    },
+    {
+      "store_id": "26",
+      "name": "Wairau Park",
+      "region": "Wairau Park, North Island",
+      "phone": "099569600"
+    },
+    {
+      "store_id": "28",
+      "name": "Queensgate",
+      "region": "Lower Hutt, North Island",
+      "phone": "048323800"
+    },
+    {
+      "store_id": "29",
+      "name": "Riccarton",
+      "region": "Riccarton, South Island",
+      "phone": "03 743 2900"
+    },
+    {
+      "store_id": "31",
+      "name": "Christchurch International Airport",
+      "region": "Christchurch, South Island",
+      "phone": "03 743 0400"
+    },
+    {
+      "store_id": "32",
+      "name": "Auckland International Airport",
+      "region": "Auckland",
+      "phone": "09 5903201"
+    },
+    {
+      "store_id": "33",
+      "name": "South City",
+      "region": "Christchurch, South Island",
+      "phone": "03 741 9300"
+    },
+    {
+      "store_id": "34",
+      "name": "Invercargill",
+      "region": "Invercargill, South Island",
+      "phone": "03 743 0500"
+    },
+    {
+      "store_id": "35",
+      "name": "Pukekohe",
+      "region": "Pukekohe",
+      "phone": "09 590 3500"
+    },
+    {
+      "store_id": "36",
+      "name": "Nelson",
+      "region": "Nelson",
+      "phone": "03 744 0700"
+    },
+    {
+      "store_id": "39",
+      "name": "Rotorua",
+      "region": "Rotorua",
+      "phone": "07 988 0200"
+    },
+    {
+      "store_id": "41",
+      "name": "Porirua",
+      "region": "Porirua",
+      "phone": "04 831 1800"
+    },
+    {
+      "store_id": "42",
+      "name": "Westgate",
+      "region": "Westgate",
+      "phone": "09 960 4200"
+    },
+    {
+      "store_id": "43",
+      "name": "Hastings",
+      "region": "Hastings",
+      "phone": "06 826 3300"
+    },
+    {
+      "store_id": "44",
+      "name": "Tauranga Crossing",
+      "region": "Tauranga",
+      "phone": "079871500"
+    },
+    {
+      "store_id": "45",
+      "name": "Newmarket",
+      "region": "Newmarket",
+      "phone": "09 960 0400"
+    },
+    {
+      "store_id": "47",
+      "name": "Napier",
+      "region": "Napier",
+      "phone": "06 826 3700"
+    }
+  ]
+}

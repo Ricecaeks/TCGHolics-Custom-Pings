@@ -11,7 +11,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Warehouse Stationery | `warehousestationery` | yes (expected) | recon pending (Cloudflare challenge) |
 | Kmart NZ | `kmart` | yes (expected) | recon pending (Akamai) |
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
-| JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock, add-to-cart). Store names still to map |
+| JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` / `shopify` | to confirm | recon pending (Shopify) |
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
 | Whitcoulls | `whitcoulls` | to confirm | recon pending |
@@ -95,11 +95,13 @@ Farmers' site search is hosted by Constructor.io on `ac.cnstrc.com`, which isn't
 | Product + **every store's stock** | the product page HTML embeds the JB product metafield JSON: `Price.DisplayPriceInc`, `Availability.OverallStatus` (`InStock`/`LimitedStock`/…), `ClickNCollectStatus`, and **`AvailabilityInStore.InStockStoreIds`** (e.g. `[21,23,28,…]`) | ✅ (3 of 3 requests OK) |
 | Price + online availability | `/products/<handle>.js` (Shopify standard) | ✅ |
 | Search / category | Algolia index `shopify_products_families` (public search key in the page), or the Shopify collection `/collections/trading-card-games` | not tested yet |
-| Store ID → name | Algolia index `shopify_store_locations` (used by `/pages/store-finder`) | not tested yet |
+| Store ID → name | Algolia index `shopify_store_locations` (used by `/pages/store-finder`), public search-only key approved 2026-10-29. `shopId` = the InStockStoreIds | ✅ |
 
 - **One request per product gives every store's stock.** It's the cheapest store-level retailer so far.
 - Each page is ~620 KB, so check every 2–5 min, not every few seconds.
-- The store ID → name map still needs to be captured: 14 IDs were in stock for the test item.
+- **Stores:** 27 retail stores, including Westgate (#42), Sylvia Park (#25) and the two airport stores.
+  - They're synced daily from the Algolia index. If that fails, a bundled copy is used (`tcgpings/retailers/data/jbhifi_stores.json`).
+  - The index also lists warehouses, head office and retired entries. These are filtered out, and any in-stock IDs they produce are ignored.
 
 ## Recon checklist for a new retailer
 

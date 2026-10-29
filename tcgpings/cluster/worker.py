@@ -87,9 +87,11 @@ class Worker:
     async def _sync_stores(self, job: Any) -> None:
         adapter = await self.ctx.adapters.get(job["retailer_id"])
         stores = await adapter.list_stores()
+        removed = 0
         if stores:
             await queries.upsert_stores(self.ctx.pool, stores)
-        log.info("%s: synced %d stores", job["retailer_id"], len(stores))
+            removed = await queries.prune_stores(self.ctx.pool, job["retailer_id"], [s.store_id for s in stores])
+        log.info("%s: synced %d stores (%d removed)", job["retailer_id"], len(stores), removed)
 
     async def _store_ids(self, retailer_id: str, wanted: list[str] | None) -> tuple[list[str], dict[str, str]]:
         names = {s["store_id"]: s["name"] for s in await queries.list_stores(self.ctx.pool, retailer_id)}

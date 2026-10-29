@@ -73,6 +73,14 @@ async def upsert_stores(db: DB, stores: list[Store]) -> None:
     )
 
 
+async def prune_stores(db: DB, retailer_id: str, keep_ids: list[str]) -> int:
+    """Drop stores the retailer no longer lists (closed, or placeholders learned before the list was known)."""
+    result = await db.execute(
+        "DELETE FROM stores WHERE retailer_id = $1 AND NOT (store_id = ANY($2::text[]))", retailer_id, keep_ids
+    )
+    return int(result.split()[-1])
+
+
 async def list_stores(db: DB, retailer_id: str) -> list[asyncpg.Record]:
     return await db.fetch("SELECT * FROM stores WHERE retailer_id = $1 ORDER BY name", retailer_id)
 
