@@ -1,0 +1,33 @@
+# Local development: a throwaway Postgres, plus an optional multi-node cluster test.
+#   docker compose -f deploy/docker-compose.dev.yml up -d db
+#   docker compose -f deploy/docker-compose.dev.yml --profile cluster up --build --scale node=3
+name: tcgpings-dev
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: tcgpings
+      POSTGRES_PASSWORD: tcgpings
+      POSTGRES_DB: tcgpings
+    ports:
+      - "54329:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcgpings"]
+      interval: 2s
+      retries: 20
+
+  node:
+    profiles: ["cluster"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["run", "--dry-run"]
+    environment:
+      DATABASE_URL: postgresql://tcgpings:tcgpings@db:5432/tcgpings
+      EGRESS_IP: 203.0.113.10
+      BACKUP_ENABLED: "false"
+      LOG_LEVEL: INFO
+    depends_on:
+      db:
+        condition: service_healthy

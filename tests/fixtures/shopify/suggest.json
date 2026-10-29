@@ -1,0 +1,46 @@
+{
+  "resources": {
+    "results": {
+      "products": [
+        {
+          "id": 7101,
+          "title": "Pokémon TCG: 30th Celebration Booster Bundle",
+          "handle": "pokemon-30th-celebration-booster-bundle",
+          "type": "Sealed",
+          "tags": ["Pokemon"],
+          "available": false,
+          "price": "59.99",
+          "price_min": "54.99",
+          "image": "https://cdn.shopify.com/s/files/1/bundle-suggest.jpg",
+          "url": "/products/pokemon-30th-celebration-booster-bundle?_pos=1&_sid=abc&_ss=r",
+          "variants": []
+        },
+        {
+          "id": 7102,
+          "title": "MTG Bundle - Reality Fracture",
+          "handle": "mtg-bundle-reality-fracture",
+          "type": "Sealed",
+          "tags": [],
+          "available": true,
+          "price": "94.99",
+          "price_min": "94.99",
+          "image": null,
+          "url": "/products/mtg-bundle-reality-fracture?_pos=2",
+          "variants": []
+        },
+        {
+          "id": 7103,
+          "title": "Charizard ex (199/165) [Scarlet & Violet: 151]",
+          "handle": "charizard-ex-199-165",
+          "type": "Pokemon Single",
+          "tags": ["Pokemon", "Singles"],
+          "available": true,
+          "price": "1,250.00",
+          "price_min": "1,250.00",
+          "featured_image": {"url": "https://cdn.shopify.com/s/files/1/zard.jpg"},
+          "variants": []
+        }
+      ]
+    }
+  }
+}

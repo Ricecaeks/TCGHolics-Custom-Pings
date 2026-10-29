@@ -1,0 +1,31 @@
+{
+  "products": [
+    {
+      "id": 7001,
+      "title": "Pokémon TCG: 30th Celebration Booster Bundle",
+      "handle": "pokemon-30th-celebration-booster-bundle",
+      "product_type": "Sealed",
+      "tags": ["Pokemon", "Pre-order"],
+      "variants": [{"id": 1, "price": "59.99", "available": true}],
+      "images": [{"src": "https://cdn.shopify.com/s/files/1/bundle.jpg"}]
+    },
+    {
+      "id": 7002,
+      "title": "Pokémon TCG: Prismatic Evolutions Elite Trainer Box",
+      "handle": "pokemon-prismatic-evolutions-etb",
+      "product_type": "Sealed",
+      "tags": "Pokemon, ETB",
+      "variants": [{"id": 2, "price": "99.00", "available": false}, {"id": 3, "price": "89.00", "available": false}],
+      "images": []
+    },
+    {
+      "id": 7003,
+      "title": "One Piece Card Game OP-10 Booster Box",
+      "handle": "one-piece-op10-booster-box",
+      "product_type": "Sealed",
+      "tags": [],
+      "variants": [{"id": 4, "price": "189.99", "available": true}],
+      "images": [{"src": "https://cdn.shopify.com/s/files/1/op10.jpg"}]
+    }
+  ]
+}
