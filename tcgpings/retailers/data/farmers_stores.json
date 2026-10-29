@@ -1,0 +1,430 @@
+{
+  "_source": "farmers.co.nz in-store stock check (ViewCheckoutShipping-GetAvailableStoresAjax), all 13 regions, 2026-10-29",
+  "_note": "Farmers identifies stores by name only. 'Northwest' is the Westgate store. Homewares-only 'Home by Farmers' stores are excluded (no toys/cards).",
+  "stores": [
+    {
+      "store_id": "kaitaia",
+      "name": "Kaitaia",
+      "region": "Northland",
+      "region_code": "NTL",
+      "address": "115 Commerce St, Kaitaia",
+      "phone": "09 408 3010"
+    },
+    {
+      "store_id": "whangarei",
+      "name": "Whangarei",
+      "region": "Northland",
+      "region_code": "NTL",
+      "address": "Cnr Bank and Robert Sts, Whangarei",
+      "phone": "09 470 0970"
+    },
+    {
+      "store_id": "newmarket",
+      "name": "Newmarket",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "309 Broadway, Newmarket",
+      "phone": "09 441 3654"
+    },
+    {
+      "store_id": "albany",
+      "name": "Albany",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Westfield Shopping Centre, Don Mckinnon Dr, Albany",
+      "phone": "09 414 3850"
+    },
+    {
+      "store_id": "lynnmall",
+      "name": "LynnMall",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Lynnmall Shopping Centre, New Lynn",
+      "phone": "09 827 3169"
+    },
+    {
+      "store_id": "queen-st",
+      "name": "Queen St",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "210 Queen St, Cnr Queen and Victoria Sts, Auckland CBD",
+      "phone": "09 950 8340"
+    },
+    {
+      "store_id": "papakura",
+      "name": "Papakura",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Cnr Great South Rd and Broadway, Papakura",
+      "phone": "09 299 8700"
+    },
+    {
+      "store_id": "northwest",
+      "name": "Northwest",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "NorthWest Shopping Centre, 1-7 Fred Taylor Drive, Massey (Westgate)",
+      "phone": "09 950 8100"
+    },
+    {
+      "store_id": "glenfield",
+      "name": "Glenfield",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Glenfield Mall, Cnr Glenfield and Downing Sts, Glenfield",
+      "phone": "09 441 3650"
+    },
+    {
+      "store_id": "shore-city",
+      "name": "Shore City",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Shore City Shopping Centre, Lake Rd, Takapuna",
+      "phone": "09 486 2004"
+    },
+    {
+      "store_id": "st-lukes",
+      "name": "St. Lukes",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Westfield Shopping Centre, 50 St Lukes Rd, Mt Albert",
+      "phone": "09 846 1029"
+    },
+    {
+      "store_id": "west-city",
+      "name": "West City",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "West City Waitakere, 7 Catherine St, Henderson",
+      "phone": "09 835 0710"
+    },
+    {
+      "store_id": "botany",
+      "name": "Botany",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Botany Town Centre, 588 Chapel Rd, Botany",
+      "phone": "09 272 9880"
+    },
+    {
+      "store_id": "manukau",
+      "name": "Manukau",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "Westfield Shopping Centre, Wiri Station Rd, Manukau City",
+      "phone": "09 262 1912"
+    },
+    {
+      "store_id": "pukekohe",
+      "name": "Pukekohe",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "3 Wesley Street, Pukekohe",
+      "phone": "09 929 8200"
+    },
+    {
+      "store_id": "sylvia-park",
+      "name": "Sylvia Park",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "286 Mt Wellington Highway, Sylvia Park",
+      "phone": "09 441 3657"
+    },
+    {
+      "store_id": "silverdale",
+      "name": "Silverdale",
+      "region": "Auckland",
+      "region_code": "AUK",
+      "address": "75 Silverdale Street, Silverdale",
+      "phone": "09 959 1050"
+    },
+    {
+      "store_id": "the-base",
+      "name": "The Base",
+      "region": "Waikato",
+      "region_code": "WKO",
+      "address": "The Base, Maaharanga Dr, Te Rapa, Hamilton",
+      "phone": "07 850 0740"
+    },
+    {
+      "store_id": "centre-place",
+      "name": "Centre Place",
+      "region": "Waikato",
+      "region_code": "WKO",
+      "address": "501 Victoria St, Shop 81 Centre Place, Hamilton CBD",
+      "phone": "07 929 2740"
+    },
+    {
+      "store_id": "chartwell",
+      "name": "Chartwell",
+      "region": "Waikato",
+      "region_code": "WKO",
+      "address": "Chartwell Shopping Centre, Cnr Comries and Hukanui Rds, Hamilton",
+      "phone": "07 854 7485"
+    },
+    {
+      "store_id": "thames",
+      "name": "Thames",
+      "region": "Waikato",
+      "region_code": "WKO",
+      "address": "536 Pollen St, Thames",
+      "phone": "07 868 0078"
+    },
+    {
+      "store_id": "the-crossing",
+      "name": "The Crossing",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "2 Taurikura Drive, Tauriko, Tauranga",
+      "phone": "07 577 3950"
+    },
+    {
+      "store_id": "bayfair",
+      "name": "Bayfair",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "Bayfair Shopping Centre, 19 Girven Rd, Mt Maunganui",
+      "phone": "07 572 8030"
+    },
+    {
+      "store_id": "rotorua",
+      "name": "Rotorua",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "Central Mall, Cnr Amohau and Amohia St, Rotorua",
+      "phone": "07 348 5173"
+    },
+    {
+      "store_id": "tauranga-cbd",
+      "name": "Tauranga CBD",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "38 Elizabeth Street, Tauranga",
+      "phone": "07 572 8040"
+    },
+    {
+      "store_id": "whakatane",
+      "name": "Whakatane",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "The Hub, 3 Phoenix Dr, Whakatane",
+      "phone": "07 306 0130"
+    },
+    {
+      "store_id": "taupo",
+      "name": "Taupo",
+      "region": "Bay of Plenty",
+      "region_code": "BOP",
+      "address": "Cnr Ruapehu and Tuwharetoa Sts, Taupo",
+      "phone": "07 376 0430"
+    },
+    {
+      "store_id": "gisborne",
+      "name": "Gisborne",
+      "region": "Gisborne",
+      "region_code": "GIS",
+      "address": "152 Gladstone Rd, Gisborne",
+      "phone": "06 869 0082"
+    },
+    {
+      "store_id": "new-plymouth",
+      "name": "New Plymouth",
+      "region": "Taranaki",
+      "region_code": "TKI",
+      "address": "Centre City Shopping Centre, 11 Gill St, New Plymouth",
+      "phone": "06 759 5550"
+    },
+    {
+      "store_id": "levin",
+      "name": "Levin",
+      "region": "Manawatu-Whanganui",
+      "region_code": "MWT",
+      "address": "The Mall, 191 Oxford St, Levin",
+      "phone": "06 366 0900"
+    },
+    {
+      "store_id": "palmerston-north",
+      "name": "Palmerston North",
+      "region": "Manawatu-Whanganui",
+      "region_code": "MWT",
+      "address": "The Plaza, 392 Church St, Palmerston North",
+      "phone": "06 355 6060"
+    },
+    {
+      "store_id": "whanganui",
+      "name": "Whanganui",
+      "region": "Manawatu-Whanganui",
+      "region_code": "MWT",
+      "address": "88 Hill Street, Whanganui",
+      "phone": "06 349 1610"
+    },
+    {
+      "store_id": "napier",
+      "name": "Napier",
+      "region": "Hawke's Bay",
+      "region_code": "HKB",
+      "address": "162-178 Hastings St, Napier",
+      "phone": "06 835 5666"
+    },
+    {
+      "store_id": "hastings",
+      "name": "Hastings",
+      "region": "Hawke's Bay",
+      "region_code": "HKB",
+      "address": "Cnr Heretaunga and King Sts, Hastings",
+      "phone": "06 871 5780"
+    },
+    {
+      "store_id": "kilbirnie",
+      "name": "Kilbirnie",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "46-54 Bay Rd, Kilbirnie",
+      "phone": "04 387 1210"
+    },
+    {
+      "store_id": "paraparaumu",
+      "name": "Paraparaumu",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "Coastlands Mall, State Highway 1, Paraparaumu",
+      "phone": "04 298 7059"
+    },
+    {
+      "store_id": "queensgate",
+      "name": "Queensgate",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "Queensgate Shopping Centre, Queens Dr, Lower Hutt",
+      "phone": "04 570 3950"
+    },
+    {
+      "store_id": "masterton",
+      "name": "Masterton",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "184-188 Queen St, Masterton",
+      "phone": "06 370 0544"
+    },
+    {
+      "store_id": "north-city",
+      "name": "North City",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "North City Shopping Centre, 2 Titahi Bay Rd, Porirua",
+      "phone": "04 237 5176"
+    },
+    {
+      "store_id": "upper-hutt",
+      "name": "Upper Hutt",
+      "region": "Wellington",
+      "region_code": "WGN",
+      "address": "The Mall, 205 Main St, Upper Hutt",
+      "phone": "04 527 2190"
+    },
+    {
+      "store_id": "blenheim",
+      "name": "Blenheim",
+      "region": "Nelson",
+      "region_code": "NSN",
+      "address": "39 Market St, Blenheim",
+      "phone": "03 520 9066"
+    },
+    {
+      "store_id": "nelson",
+      "name": "Nelson",
+      "region": "Nelson",
+      "region_code": "NSN",
+      "address": "219 Trafalgar St (Family) / 90-100 Bridge St (Home), Nelson",
+      "phone": "03 548 1449"
+    },
+    {
+      "store_id": "richmond",
+      "name": "Richmond",
+      "region": "Nelson",
+      "region_code": "NSN",
+      "address": "Richmond Mall, Cnr Queen, Croucher and Talbot Sts, Richmond",
+      "phone": "03 543 8085"
+    },
+    {
+      "store_id": "riccarton",
+      "name": "Riccarton",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "Westfield Shopping Centre, Riccarton Rd, Christchurch",
+      "phone": "03 348 0889"
+    },
+    {
+      "store_id": "ashburton",
+      "name": "Ashburton",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "150 East St, Ashburton",
+      "phone": "03 307 9317"
+    },
+    {
+      "store_id": "rangiora",
+      "name": "Rangiora",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "Cnr High and Percival Streets, Rangiora",
+      "phone": "03 745 9530"
+    },
+    {
+      "store_id": "the-palms",
+      "name": "The Palms",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "The Palms Shopping Centre, 24 Marshland Rd, Shirley, Christchurch",
+      "phone": "03 375 7096"
+    },
+    {
+      "store_id": "hornby",
+      "name": "Hornby",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "The Hub, 418 Main South Rd, Hornby, Christchurch",
+      "phone": "03 375 7270"
+    },
+    {
+      "store_id": "northlands",
+      "name": "Northlands",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "Northlands Shopping Centre, 55 Main North Rd, Papanui, Christchurch",
+      "phone": "03 375 0736"
+    },
+    {
+      "store_id": "timaru",
+      "name": "Timaru",
+      "region": "Canterbury",
+      "region_code": "CAN",
+      "address": "256-260 Stafford St, Timaru",
+      "phone": "03 687 9170"
+    },
+    {
+      "store_id": "dunedin",
+      "name": "Dunedin",
+      "region": "Otago",
+      "region_code": "OTA",
+      "address": "150-180 George St, Dunedin",
+      "phone": "03 477 3171"
+    },
+    {
+      "store_id": "oamaru",
+      "name": "Oamaru",
+      "region": "Otago",
+      "region_code": "OTA",
+      "address": "67-73 Thames St, Oamaru",
+      "phone": "03 433 0155"
+    },
+    {
+      "store_id": "invercargill",
+      "name": "Invercargill",
+      "region": "Southland",
+      "region_code": "STL",
+      "address": "67 Esk Street, Invercargill",
+      "phone": "03 211 1140"
+    }
+  ]
+}
