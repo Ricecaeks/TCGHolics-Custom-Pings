@@ -167,3 +167,62 @@ async def test_failing_adapter_is_recorded_and_backed_off(pool, tmp_path):
 def reset_fake():
     FakeStoreRetailer.stock = {"westgate": Stock(Level.OUT, 0), "albany": Stock(Level.IN, 3)}
     FakeStoreRetailer.calls = []
+
+
+# --- discovery + keyword routes ---------------------------------------------------------
+
+
+@register
+class FakeDiscoveryRetailer(RetailerAdapter):
+    adapter_name = "_fake_discovery"
+    supports_store_stock = True
+    supports_discovery = True
+    catalogue: list = []
+
+    async def discover(self):
+        return [Product(self.retailer_id, sku, title, f"https://fake/{sku}", online=Stock(Level.IN),
+                        atc_url=f"https://fake/cart/{sku}:1")
+                for sku, title in self.catalogue]
+
+    async def search(self, query):
+        return []
+
+    async def fetch_products(self, skus):
+        return []
+
+    async def list_stores(self):
+        return [Store(self.retailer_id, "w", "Westgate")]
+
+
+async def test_discovery_alerts_new_releases_matching_keywords(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "disc", "_fake_discovery", "Disco")
+    await queries.add_route(pool, 1, "https://discord.test/hype", "disc",
+                            keywords="30th booster bundle, elite trainer box, -sleeves")
+    await queries.add_route(pool, 2, "https://discord.test/all", "disc")
+    worker = Worker(ctx)
+    FakeDiscoveryRetailer.catalogue = [("old", "Pokemon Scarlet Violet Booster Pack")]
+    await reconcile(ctx)
+    await run_due(worker, ctx)  # baseline: nothing announced
+    assert await pool.fetchval("SELECT count(*) FROM alert_outbox") == 0
+
+    FakeDiscoveryRetailer.catalogue += [
+        ("bb30", "Pokémon TCG: 30th Celebration Booster Bundle"),
+        ("sleeves", "Pokemon Elite Trainer Box Sleeves"),
+        ("single", "Charizard ex (199/165) [Pokemon 151]"),
+    ]
+    await run_due(worker, ctx)
+    rows = await pool.fetch(
+        "SELECT r.channel_id, o.payload FROM alert_outbox o JOIN routes r ON r.id = o.route_id ORDER BY 1, 2")
+    got = sorted((r["channel_id"], r["payload"]["sku"]) for r in rows)
+    # keyword channel: only the 30th bundle. catch-all channel: every new sealed product, never singles.
+    assert got == [(1, "bb30"), (2, "bb30"), (2, "sleeves")]
+    assert rows[0]["payload"]["atc_url"] == "https://fake/cart/bb30:1"
+
+    tracked = {r["key"] for r in await pool.fetch("SELECT key FROM jobs WHERE auto")}
+    assert tracked == {"sku:disc:bb30"}, "store-level tracking only for keyword matches"
+
+    await queries.set_route_keywords(pool, 1, "upc")  # staff change their mind
+    ctx.routes.invalidate()
+    await run_due(worker, ctx)
+    assert not await pool.fetchval("SELECT count(*) FROM jobs WHERE auto")

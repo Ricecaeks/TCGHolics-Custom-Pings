@@ -91,12 +91,12 @@ The store counts marked ≈ are estimates and need confirming during each retail
 
 | Retailer | Stores | Store-level stock? | Platform / protection | Plain request | Likely approach |
 |---|---|---|---|---|---|
-| **Farmers** | **53** (done) | yes: In/Not in stock, refreshed daily ~8am | Intershop + **Akamai Bot Manager** | 200, then 403 | C (blocked for now), then D+C, or E/F as fallback. Search could use Constructor.io (needs your OK) |
-| **The Warehouse** | ≈85 | likely (click & collect) | Salesforce Commerce Cloud + Cloudflare | 200 | A: SFCC controller JSON for product, store and inventory |
+| **Farmers** | **53** (done) | yes: In/Not in stock, refreshed daily ~8am | Intershop + **Akamai Bot Manager** | 200, then 403 | **A via Constructor.io** for new listings and online stock (approved, works). Price and store stock: C (blocked for now), then D+C, or E/F |
+| **The Warehouse** | **76** (confirmed) | yes, per store, 15 regions | Salesforce Commerce Cloud + Cloudflare | 200 | A for listings and store list. Store stock needs a per-product token from the product page, and the **Pokémon product page is behind a Cloudflare Turnstile challenge** |
 | **Noel Leeming** | ≈70 | likely | Salesforce Commerce Cloud + Cloudflare (same group as Warehouse) | 200 | A: shares most of The Warehouse's code |
 | **Warehouse Stationery** | ≈60 | likely | Cloudflare **challenge** | 403 | C or E |
 | **Kmart NZ** | ≈27 | likely (click & collect API) | Next.js + Constructor.io + **Akamai** | 200 (first hit) | A via its stock API if not Akamai-gated, otherwise C/E |
-| **JB Hi-Fi NZ** | ≈15 | maybe | Shopify + Algolia + Cloudflare | 200 | A: Shopify JSON / Algolia, like the existing adapter |
+| **JB Hi-Fi NZ** | ≈15 | **yes**: in-stock store IDs embedded in the product page | Shopify + Algolia + Cloudflare | 200 (3/3) | **A, plain HTTP, confirmed.** One request per product gives every store's stock |
 | **Toyworld** | ≈30 | maybe | Shopify + Cloudflare | 200 | A: probably works with the generic Shopify adapter as is |
 | **Mighty Ape** | online only | no | **DataDome** | 403 | C or E. Online stock only |
 | **Whitcoulls** | ≈50 | maybe | nothing detected | 200 | A or B |
@@ -105,12 +105,14 @@ The store counts marked ≈ are estimates and need confirming during each retail
 | Independent card shops | — | online | Shopify (most) | 200 | A: generic Shopify adapter, works today |
 | ~~EB Games NZ~~ | — | — | — | — | **dropped: stores closed** |
 
-**Suggested order:**
-1. The Warehouse + Noel Leeming: one shared codebase, ~155 stores, probably plain JSON.
-2. Toyworld and JB Hi-Fi: Shopify, near-free.
-3. Kmart, then Woolworths.
-4. Farmers once a browser/proxy approach is proven.
-5. Mighty Ape and Warehouse Stationery last.
+**Suggested order** (updated after the Warehouse and JB recon):
+1. JB Hi-Fi: plain HTTP with store-level stock, confirmed.
+2. Farmers via Constructor.io: new listings and online stock, confirmed.
+3. The Warehouse and Noel Leeming: listings and online stock now; per-store only for products whose pages aren't challenged.
+4. Toyworld: Shopify, near-free.
+5. Kmart, then Woolworths.
+6. Farmers per-store stock once a browser/proxy approach is proven.
+7. Mighty Ape and Warehouse Stationery last.
 
 ## 6. Farmers: status and next steps
 

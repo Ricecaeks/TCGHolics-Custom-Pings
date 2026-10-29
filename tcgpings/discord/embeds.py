@@ -33,9 +33,12 @@ def _stock(level: str | None, qty: int | None) -> str:
 def build_embed(event: Event) -> discord.Embed:
     retailer = event.extra.get("retailer_name") or event.retailer_id
     where = event.store_name or "Online"
+    links = [f"[🛒 **Add to cart**]({event.atc_url})"] if event.atc_url else []
+    links.append(f"[View product]({event.url})")
     embed = discord.Embed(
         title=event.title[:256],
-        url=event.url,
+        url=event.atc_url or event.url,
+        description=" · ".join(links),
         color=COLORS[event.type],
         timestamp=datetime.now(timezone.utc),
     )
@@ -54,10 +57,14 @@ def build_embed(event: Event) -> discord.Embed:
     elif event.new_price is not None:
         embed.add_field(name="Price", value=format_price(event.new_price))
 
-    embed.add_field(name="Store", value=where)
+    if event.stores:
+        names = [s["name"] for s in event.stores]
+        shown = ", ".join(names[:25]) + (f" (+{len(names) - 25} more)" if len(names) > 25 else "")
+        embed.add_field(name=f"Stores ({len(names)})", value=shown[:1024], inline=False)
+    else:
+        embed.add_field(name="Store", value=where)
     if event.franchise:
         embed.add_field(name="Game", value=FRANCHISE_NAMES.get(event.franchise, event.franchise))
-    embed.add_field(name="Links", value=f"[Product]({event.url})", inline=False)
     embed.set_footer(text=f"TCGHolics Pings · {event.sku}")
     return embed
 
@@ -76,5 +83,6 @@ def sample_event(retailer_id: str = "test", store_name: str | None = "Westgate")
         new_level="in",
         new_qty=12,
         new_price=4999,
+        atc_url="https://tcgholics.co.nz",
         extra={"retailer_name": "Test Retailer"},
     )

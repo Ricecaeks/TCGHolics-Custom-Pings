@@ -18,6 +18,7 @@ def _event(kind: EventType, product: Product, store_id: str, store_name: str | N
         image=product.image,
         franchise=product.franchise,
         ptype=product.ptype,
+        atc_url=product.atc_url,
         store_id=store_id,
         store_name=store_name,
         **kw,

@@ -7,11 +7,13 @@ import contextlib
 import logging
 from typing import Any
 
-from tcgpings.classify import is_card_product
+from tcgpings.classify import is_card_product, is_sealed_product
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.engine.pipeline import classify_product
 from tcgpings.engine.planner import sku_job_key
+from tcgpings.engine.router import keyword_routes_match
+from tcgpings.models import Store
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +80,7 @@ class Worker:
             "sync_stores": self._sync_stores,
             "watch_sku": self._watch_sku,
             "watch_search": self._watch_search,
+            "discover": self._discover,
         }[job["kind"]]
         await handler(job)
 
@@ -108,11 +111,58 @@ class Worker:
             return
         product = products[0]
         stock, names = None, None
-        if adapter.supports_store_stock and await self._store_check_due(adapter, product.sku):
-            ids, names = await self._store_ids(job["retailer_id"], payload.get("store_ids"))
-            if ids:
+        if adapter.store_stock_enabled and await self._store_check_due(adapter, product.sku):
+            wanted = payload.get("store_ids")
+            ids, names = await self._store_ids(job["retailer_id"], wanted)
+            if ids or (wanted is None and adapter.store_stock_discovers_stores):
                 stock = await adapter.store_stock(product.sku, ids)
+                new = [Store(adapter.retailer_id, sid, adapter.store_label(sid)) for sid in stock if sid not in names]
+                if new:
+                    await queries.upsert_stores(self.ctx.pool, new)
+                    names.update({s.store_id: s.name for s in new})
+                if wanted is not None:
+                    stock = {sid: s for sid, s in stock.items() if sid in wanted}
         await self.ctx.pipeline.record(retailer, product, stock, names, announce_new=False)
+
+    async def _discover(self, job: Any) -> None:
+        retailer = await self.ctx.adapters.retailer(job["retailer_id"])
+        adapter = await self.ctx.adapters.get(job["retailer_id"])
+        announce = job["last_ok_at"] is not None  # first run is a silent baseline
+        routes = await self.ctx.routes.get()
+        results = await adapter.discover()
+        kept, wanted = 0, []
+        for product in results:
+            classify_product(product)
+            if not is_sealed_product(product.title, product.franchise, product.ptype):
+                continue
+            await self.ctx.pipeline.record(retailer, product, announce_new=announce)
+            kept += 1
+            if adapter.store_stock_enabled and keyword_routes_match(routes, adapter.retailer_id, product.title):
+                wanted.append(product.sku)
+        if adapter.store_stock_enabled:
+            await self._track_discovered(adapter, wanted, routes)
+        log.debug("%s discovery: %d listed, %d sealed TCG, %d tracked per store",
+                  adapter.retailer_id, len(results), kept, len(wanted))
+
+    async def _track_discovered(self, adapter: Any, skus: list[str], routes: list) -> None:
+        """Keep store-level jobs for discovered products that match a keyword route; drop ones that no longer do."""
+        existing = await queries.discovery_tracked_jobs(self.ctx.pool, adapter.retailer_id)
+        stale = [r["id"] for r in existing
+                 if not r["title"] or not keyword_routes_match(routes, adapter.retailer_id, r["title"])]
+        await queries.delete_jobs(self.ctx.pool, stale)
+        room = self.ctx.settings.max_tracked_per_retailer - (len(existing) - len(stale))
+        tracked = {r["sku"] for r in existing}
+        interval = adapter.default_sku_interval or self.ctx.settings.default_sku_interval
+        for sku in skus:
+            if sku in tracked:
+                continue
+            if room <= 0:
+                log.warning("%s: store-level tracking limit reached (%d); narrow the route keywords",
+                            adapter.retailer_id, self.ctx.settings.max_tracked_per_retailer)
+                break
+            if await queries.add_discovery_job(self.ctx.pool, sku_job_key(adapter.retailer_id, sku),
+                                               adapter.retailer_id, sku, interval):
+                room -= 1
 
     async def _watch_search(self, job: Any) -> None:
         payload = job["payload"]
@@ -132,7 +182,7 @@ class Worker:
                 continue
             await self.ctx.pipeline.record(retailer, product, announce_new=announce)
             kept += 1
-            if adapter.supports_store_stock:
+            if adapter.store_stock_enabled:
                 # Found products get their own store-level job, owned by the watch.
                 await queries.ensure_auto_job(
                     self.ctx.pool,

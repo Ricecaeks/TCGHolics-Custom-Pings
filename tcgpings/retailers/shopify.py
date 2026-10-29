@@ -1,6 +1,7 @@
 """Generic Shopify storefront adapter. One `retailers` row per shop, config {"domain": "..."}.
 
-Uses Shopify's public storefront JSON (no API key):
+Uses Shopify's public storefront JSON (no API key). Alerts get a cart permalink
+(/cart/<variant id>:1) as the add-to-cart link.
   /search/suggest.json?q=...         server-side search over the whole catalogue (top 10 matches)
   /products.json?limit=250&page=N    catalogue, most recently updated first: catches new listings
   /products/<handle>.js              single product, used for watched SKUs
@@ -23,6 +24,7 @@ from tcgpings.retailers.base import RetailerAdapter, register
 @register
 class ShopifyAdapter(RetailerAdapter):
     adapter_name = "shopify"
+    supports_discovery = True
 
     def __init__(self, retailer, http) -> None:
         super().__init__(retailer, http)
@@ -32,6 +34,24 @@ class ShopifyAdapter(RetailerAdapter):
         self.domain = domain.removeprefix("https://").removeprefix("http://").strip("/")
         self.base = f"https://{self.domain}"
         self.catalogue_pages = int(self.config.get("catalogue_pages", 2))
+        # Discovery reads the most recently updated products (new listings land here).
+        self.discover_pages = int(self.config.get("discover_pages", 1))
+
+    async def discover(self) -> list[Product]:
+        found: list[Product] = []
+        for page in range(1, self.discover_pages + 1):
+            data = await self.http.get_json(
+                self.policy, f"{self.base}/products.json", params={"limit": "250", "page": str(page)}
+            )
+            products = data.get("products") or []
+            found += [self.parse_catalogue_product(raw) for raw in products]
+            if len(products) < 250:
+                break
+        return found
+
+    def cart_url(self, variant_id) -> str | None:
+        """Shopify cart permalink: adds one unit and opens the cart."""
+        return f"{self.base}/cart/{variant_id}:1" if variant_id else None
 
     async def search(self, query: str) -> list[Product]:
         found: dict[str, Product] = {}
@@ -89,6 +109,7 @@ class ShopifyAdapter(RetailerAdapter):
         images = raw.get("images") or []
         available = any(v.get("available") for v in variants)
         prices = [p for p in (to_cents(v.get("price")) for v in variants) if p is not None]
+        variant = next((v for v in variants if v.get("available")), variants[0] if variants else {})
         return Product(
             retailer_id=self.retailer_id,
             sku=raw["handle"],
@@ -99,10 +120,13 @@ class ShopifyAdapter(RetailerAdapter):
             online=Stock(Level.IN if available else Level.OUT),
             # Singles are often titled just "Charizard ex (199/165)"; the game is in the type/tags.
             franchise=franchise_of(raw["title"]) or franchise_of(" ".join([raw.get("product_type", ""), *_tags(raw)])),
+            atc_url=self.cart_url(variant.get("id")),
         )
 
     def parse_suggest_product(self, raw: dict) -> Product:
         image = raw.get("image") or (raw.get("featured_image") or {}).get("url")
+        variants = raw.get("variants") or []
+        variant = next((v for v in variants if v.get("available")), variants[0] if variants else {})
         return Product(
             retailer_id=self.retailer_id,
             sku=raw["handle"],
@@ -112,6 +136,7 @@ class ShopifyAdapter(RetailerAdapter):
             price_cents=to_cents(raw.get("price_min") or raw.get("price")),
             online=Stock(Level.IN if raw.get("available") else Level.OUT),
             franchise=franchise_of(raw["title"]) or franchise_of(" ".join([raw.get("type", ""), *_tags(raw)])),
+            atc_url=self.cart_url(variant.get("id")),
         )
 
     def parse_product_js(self, raw: dict) -> Product:
@@ -119,6 +144,8 @@ class ShopifyAdapter(RetailerAdapter):
         image = raw.get("featured_image")
         if image and image.startswith("//"):
             image = "https:" + image
+        variants = raw.get("variants") or []
+        variant = next((v for v in variants if v.get("available")), variants[0] if variants else {})
         return Product(
             retailer_id=self.retailer_id,
             sku=raw["handle"],
@@ -127,6 +154,7 @@ class ShopifyAdapter(RetailerAdapter):
             image=image,
             price_cents=raw.get("price_min", raw.get("price")),
             online=Stock(Level.IN if raw.get("available") else Level.OUT),
+            atc_url=self.cart_url(variant.get("id")),
         )
 
 

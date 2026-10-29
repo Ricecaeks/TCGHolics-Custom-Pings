@@ -75,7 +75,7 @@ def plan(retailers, watches):
 
 def test_keyword_watch_fans_out_to_every_enabled_retailer():
     jobs = plan([retailer("a"), retailer("b"), retailer("c", enabled=False)], [watch(1)])
-    assert set(jobs) == {"search:a:pokemon 30th:*", "search:b:pokemon 30th:*"}
+    assert {k for k in jobs if k.startswith("search:")} == {"search:a:pokemon 30th:*", "search:b:pokemon 30th:*"}
     assert jobs["search:a:pokemon 30th:*"]["interval"] == 300
 
 
@@ -113,3 +113,43 @@ def test_unknown_adapters_and_retailers_are_skipped():
     jobs = plan([retailer("x", adapter="nope")], [watch(1, retailer_id="x"), watch(2, kind="sku", query="1", retailer_id="gone")])
     assert jobs == {}
     assert "_planner_stores" in REGISTRY
+
+
+# --- keywords, discovery, merged store alerts --------------------------------------------
+
+
+def test_route_keywords_filter_titles():
+    r = route(keywords="30th booster bundle, elite trainer box, -sleeves")
+    hit = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="1", url="u", title="Pokemon 30th Booster Bundle")
+    miss = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="2", url="u", title="Pokemon Booster Pack")
+    sleeves = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="3", url="u", title="Elite Trainer Box Sleeves")
+    assert route_matches(r, hit) and not route_matches(r, miss) and not route_matches(r, sleeves)
+
+
+def test_keyword_routes_match_respects_retailer():
+    from tcgpings.engine.router import keyword_routes_match
+
+    routes = [route(retailer_id="farmers", keywords="etb"), route(retailer_id=None, keywords=None)]
+    assert keyword_routes_match(routes, "farmers", "Pokemon Elite Trainer Box")
+    assert not keyword_routes_match(routes, "jbhifi", "Pokemon Elite Trainer Box")
+
+
+def test_discovery_job_for_every_enabled_retailer_that_supports_it():
+    jobs = plan([retailer("shop"), retailer("off", enabled=False)], [])
+    assert jobs["discover:shop"]["kind"] == "discover" and jobs["discover:shop"]["interval"] == 180
+    assert "discover:off" not in jobs
+
+
+def test_merge_store_events():
+    from tcgpings.engine.pipeline import merge_store_events
+
+    def ev(store, kind=EventType.RESTOCK, sku="1"):
+        return Event(type=kind, retailer_id="jbhifi", sku=sku, url="u", title="t",
+                     store_id=store, store_name=f"Store {store}")
+
+    merged = merge_store_events([ev("21"), ev("14"), ev(ONLINE), ev("33", EventType.OUT_OF_STOCK), ev("5", sku="2")])
+    restocks = [e for e in merged if e.type is EventType.RESTOCK and e.sku == "1" and e.store_id != ONLINE]
+    assert len(merged) == 4
+    [combined] = restocks
+    assert combined.store_name == "2 stores" and [s["id"] for s in combined.stores] == ["14", "21"]
+    assert combined.store_id.startswith("*")

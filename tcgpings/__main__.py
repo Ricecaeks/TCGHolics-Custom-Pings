@@ -52,6 +52,8 @@ async def _probe(args: argparse.Namespace) -> None:
         started = time.monotonic()
         if args.action == "search":
             out = [asdict(classify_product(p)) for p in await adapter.search(" ".join(args.args))]
+        elif args.action == "discover":
+            out = [asdict(classify_product(p)) for p in await adapter.discover()]
         elif args.action == "product":
             out = [asdict(classify_product(p)) for p in await adapter.fetch_products([adapter.parse_ref(a) for a in args.args])]
         elif args.action == "stores":
@@ -87,7 +89,8 @@ async def _admin(args: argparse.Namespace, settings: Settings) -> None:
         elif args.admin == "add-route":
             store = ONLINE if args.store == "online" else args.store
             rid = await queries.add_route(
-                pool, args.channel_id, args.webhook, args.retailer, store, args.franchise, args.events or None, args.role
+                pool, args.channel_id, args.webhook, args.retailer, store, args.franchise, args.events or None,
+                args.role, args.keywords,
             )
             print(f"route #{rid} added")
         elif args.admin == "show":
@@ -127,7 +130,7 @@ def main(argv: list[str] | None = None) -> None:
 
     probe = sub.add_parser("probe", help="query a retailer live, no database needed")
     probe.add_argument("adapter")
-    probe.add_argument("action", choices=["search", "product", "stores", "stock"])
+    probe.add_argument("action", choices=["search", "discover", "product", "stores", "stock"])
     probe.add_argument("args", nargs="*")
     probe.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="adapter config, e.g. domain=x.co.nz")
     probe.add_argument("--store", action="append", default=[], help="store id (for stock)")
@@ -155,6 +158,7 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--franchise")
     a.add_argument("--events", nargs="*")
     a.add_argument("--role", type=int)
+    a.add_argument("--keywords", help='e.g. "30th booster bundle, elite trainer box, -sleeves"')
     asub.add_parser("show")
 
     args = parser.parse_args(argv)

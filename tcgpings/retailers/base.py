@@ -32,6 +32,10 @@ class RetailerAdapter(ABC):
     # Check intervals when a watch doesn't set one (None = the global defaults in Settings).
     default_sku_interval: ClassVar[int | None] = None
     default_search_interval: ClassVar[int | None] = None
+    # Discovery: a cheap scan of the retailer's whole TCG range (category listing / newest
+    # products), run on a timer for every enabled retailer whether or not anything is watched.
+    supports_discovery: ClassVar[bool] = False
+    default_discover_interval: ClassVar[int | None] = None
 
     def __init__(self, retailer: Any, http: HttpClient) -> None:
         self.retailer_id: str = retailer["id"]
@@ -47,6 +51,23 @@ class RetailerAdapter(ABC):
     @abstractmethod
     async def fetch_products(self, skus: list[str]) -> list[Product]:
         """Current online stock and price for specific products."""
+
+    async def discover(self) -> list[Product]:
+        """The retailer's current TCG range, newest first where possible."""
+        return []
+
+    @property
+    def store_stock_enabled(self) -> bool:
+        """Instance-level switch (e.g. Farmers only does store stock when its browser is on)."""
+        return self.supports_store_stock
+
+    # True when store_stock() reports stores on its own (e.g. a list of in-stock store ids),
+    # so it's worth calling before the store list is known.
+    store_stock_discovers_stores: ClassVar[bool] = False
+
+    def store_label(self, store_id: str) -> str:
+        """Display name for a store id the store list doesn't know yet."""
+        return f"Store {store_id}"
 
     async def list_stores(self) -> list[Store]:
         return []

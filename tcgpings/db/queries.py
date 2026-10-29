@@ -199,6 +199,35 @@ async def ensure_auto_job(
     return result.endswith(" 1")
 
 
+async def discovery_tracked_jobs(db: DB, retailer_id: str) -> list[asyncpg.Record]:
+    """Store-level jobs that discovery created for keyword-matching products, with their titles."""
+    return await db.fetch(
+        """
+        SELECT j.id, j.key, j.payload->>'sku' AS sku, p.title FROM jobs j
+        LEFT JOIN products p ON p.retailer_id = j.retailer_id AND p.sku = j.payload->>'sku'
+        WHERE j.retailer_id = $1 AND j.auto AND j.payload->>'source' = 'discover'
+        """,
+        retailer_id,
+    )
+
+
+async def add_discovery_job(db: DB, key: str, retailer_id: str, sku: str, interval_seconds: int) -> bool:
+    result = await db.execute(
+        """
+        INSERT INTO jobs (key, kind, retailer_id, payload, interval_seconds, auto)
+        VALUES ($1, 'watch_sku', $2, $3, $4, true)
+        ON CONFLICT (key) DO NOTHING
+        """,
+        key, retailer_id, {"sku": sku, "store_ids": None, "watch_ids": [], "source": "discover"}, interval_seconds,
+    )
+    return result.endswith(" 1")
+
+
+async def delete_jobs(db: DB, job_ids: list[int]) -> None:
+    if job_ids:
+        await db.execute("DELETE FROM jobs WHERE id = ANY($1::bigint[])", job_ids)
+
+
 async def reconcile_jobs(db: asyncpg.Connection, desired: list[dict]) -> None:
     """Make the non-auto jobs table match `desired` (dicts with key/kind/retailer_id/payload/interval)."""
     async with db.transaction():
@@ -242,22 +271,29 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
 
 
 async def upsert_product(db: DB, p: Product) -> bool:
-    """Returns True when the product was seen for the first time."""
-    return await db.fetchval(
+    """Returns True when the product was seen for the first time.
+
+    Fills in `p.atc_url` / `p.image` from earlier sightings when this fetch didn't have them.
+    """
+    row = await db.fetchrow(
         """
-        INSERT INTO products (retailer_id, sku, title, url, image, franchise, ptype)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO products (retailer_id, sku, title, url, image, franchise, ptype, atc_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (retailer_id, sku) DO UPDATE SET
             title = EXCLUDED.title,
             url = EXCLUDED.url,
             image = coalesce(EXCLUDED.image, products.image),
             franchise = coalesce(EXCLUDED.franchise, products.franchise),
             ptype = coalesce(EXCLUDED.ptype, products.ptype),
+            atc_url = coalesce(EXCLUDED.atc_url, products.atc_url),
             last_seen_at = now()
-        RETURNING (xmax = 0)
+        RETURNING (xmax = 0) AS inserted, atc_url, image
         """,
-        p.retailer_id, p.sku, p.title, p.url, p.image, p.franchise, p.ptype,
+        p.retailer_id, p.sku, p.title, p.url, p.image, p.franchise, p.ptype, p.atc_url,
     )
+    p.atc_url = p.atc_url or row["atc_url"]
+    p.image = p.image or row["image"]
+    return row["inserted"]
 
 
 async def get_product(db: DB, retailer_id: str, sku: str) -> asyncpg.Record | None:
@@ -352,14 +388,20 @@ async def add_route(
     franchise: str | None = None,
     event_types: list[str] | None = None,
     role_id: int | None = None,
+    keywords: str | None = None,
 ) -> int:
     return await db.fetchval(
         """
-        INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+        INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
         """,
-        retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id,
+        retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords or None,
     )
+
+
+async def set_route_keywords(db: DB, route_id: int, keywords: str | None) -> bool:
+    result = await db.execute("UPDATE routes SET keywords = $2 WHERE id = $1", route_id, keywords or None)
+    return result.endswith(" 1")
 
 
 async def remove_route(db: DB, route_id: int) -> bool:
@@ -507,3 +549,14 @@ async def prune(db: DB, retention_days: int) -> tuple[int, int]:
 
 async def database_size_mb(db: DB) -> float:
     return await db.fetchval("SELECT (pg_database_size(current_database()) / 1048576.0)::float8")
+
+
+async def recent_products(db: DB, retailer_id: str | None, limit: int) -> list[asyncpg.Record]:
+    return await db.fetch(
+        """
+        SELECT retailer_id, sku, title FROM products
+        WHERE $1::text IS NULL OR retailer_id = $1
+        ORDER BY last_seen_at DESC LIMIT $2
+        """,
+        retailer_id, limit,
+    )

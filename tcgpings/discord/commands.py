@@ -13,6 +13,7 @@ from tcgpings.cluster.leadership import reconcile
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.discord.embeds import sample_event
+from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.models import ONLINE, EventType, slugify
 from tcgpings.retailers import REGISTRY, build_adapter
 
@@ -88,10 +89,17 @@ def _describe_route(r) -> str:
     store = "online" if r["store_id"] == ONLINE else (r["store_id"] or "any store")
     events = ", ".join(r["event_types"]) if r["event_types"] else "default events"
     role = f" · <@&{r['role_id']}>" if r["role_id"] else ""
+    keywords = f"\n  ↳ keywords: `{r['keywords']}`" if r.get("keywords") else ""
     return (
         f"**#{r['id']}** <#{r['channel_id']}> · {r['retailer_id'] or 'any retailer'} · {store}"
-        f" · {r['franchise'] or 'any game'} · {events}{role}"
+        f" · {r['franchise'] or 'any game'} · {events}{role}{keywords}"
     )
+
+
+KEYWORDS_HELP = (
+    "Comma-separated alternatives; all words in one alternative must appear; `-word` excludes. "
+    "e.g. `30th booster bundle, elite trainer box, upc, -sleeves`"
+)
 
 
 async def _webhook_for(channel: discord.TextChannel, me: discord.abc.User) -> discord.Webhook:
@@ -208,6 +216,7 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         events="Comma list of: new_product, restock, qty_change, price_change, out_of_stock "
                "(default: all except out_of_stock)",
         role="Role to ping with each alert",
+        keywords=KEYWORDS_HELP[:100],
     )
     @app_commands.choices(franchise=FRANCHISE_CHOICES)
     @app_commands.autocomplete(retailer=retailer_autocomplete, store=store_autocomplete)
@@ -219,6 +228,7 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         franchise: app_commands.Choice[str] | None = None,
         events: str | None = None,
         role: discord.Role | None = None,
+        keywords: str | None = None,
     ) -> None:
         ctx = _ctx(interaction)
         channel = interaction.channel
@@ -249,10 +259,20 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         hook = await _webhook_for(channel, interaction.client.user)
         route_id = await queries.add_route(
             ctx.pool, channel.id, hook.url, retailer, store_id,
-            franchise.value if franchise else None, event_types, role.id if role else None,
+            franchise.value if franchise else None, event_types, role.id if role else None, keywords,
         )
         ctx.routes.invalidate()
-        await _reply(interaction, f"Route **#{route_id}** → {channel.mention}. Use `/test-alert` to check it.")
+        filt = f"\nKeywords: {KeywordFilter.parse(keywords).describe()}" if keywords else ""
+        await _reply(interaction, f"Route **#{route_id}** → {channel.mention}.{filt}\nUse `/test-alert` to check it.")
+
+    @app_commands.command(name="keywords", description="Change (or clear) a route's keyword filter")
+    @app_commands.describe(route_id="Route id from /route list", keywords=KEYWORDS_HELP[:100])
+    async def keywords(self, interaction: discord.Interaction, route_id: int, keywords: str | None = None) -> None:
+        ctx = _ctx(interaction)
+        if not await queries.set_route_keywords(ctx.pool, route_id, keywords):
+            return await _reply(interaction, f"No route #{route_id}.")
+        ctx.routes.invalidate()
+        await _reply(interaction, f"Route #{route_id} now alerts on: **{KeywordFilter.parse(keywords).describe()}**")
 
     @app_commands.command(name="list", description="List routes (this channel only by default)")
     async def list(self, interaction: discord.Interaction, everywhere: bool = False) -> None:
@@ -403,6 +423,23 @@ async def status_cmd(interaction: discord.Interaction) -> None:
     await _reply(interaction, "\n".join(lines))
 
 
+@app_commands.command(name="keywords-test", description="Preview which recent products a keyword filter would alert on")
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.describe(keywords=KEYWORDS_HELP[:100], retailer="Only this retailer's products")
+@app_commands.autocomplete(retailer=retailer_autocomplete)
+async def keywords_test_cmd(interaction: discord.Interaction, keywords: str, retailer: str | None = None) -> None:
+    ctx = _ctx(interaction)
+    filt = KeywordFilter.parse(keywords)
+    rows = await queries.recent_products(ctx.pool, retailer, 500)
+    hits = [r for r in rows if filt.matches(r["title"])]
+    lines = [f"**Filter:** {filt.describe()}", f"Matches {len(hits)} of the {len(rows)} most recently seen products:"]
+    lines += [f"• `{r['retailer_id']}` {r['title']}" for r in hits[:20]]
+    if len(hits) > 20:
+        lines.append(f"…and {len(hits) - 20} more")
+    await _reply(interaction, "\n".join(lines))
+
+
 @app_commands.command(name="test-alert", description="Send a sample alert through every route in this channel")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
@@ -420,7 +457,7 @@ async def test_alert_cmd(interaction: discord.Interaction) -> None:
 def register(tree: app_commands.CommandTree) -> None:
     for group in (WatchGroup(), RouteGroup(), RetailerGroup()):
         tree.add_command(group)
-    for cmd in (stores_cmd, status_cmd, test_alert_cmd):
+    for cmd in (stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd):
         tree.add_command(cmd)
 
     async def check(interaction: discord.Interaction) -> bool:

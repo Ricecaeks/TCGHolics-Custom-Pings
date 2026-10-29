@@ -49,6 +49,7 @@ async def reconcile(ctx: Context) -> int:
         s.default_sku_interval,
         s.default_search_interval,
         s.store_sync_interval,
+        s.default_discover_interval,
     )
     async with ctx.pool.acquire() as conn:
         await queries.reconcile_jobs(conn, desired)

@@ -44,3 +44,22 @@ def test_matches_query_is_accent_and_case_insensitive():
     assert matches_query("Pokémon TCG: 30th Celebration Booster Bundle", "pokemon 30th bundle")
     assert not matches_query("Pokémon TCG: 151 Booster Bundle", "pokemon 30th")
     assert matches_query("Yu-Gi-Oh! Rarity Collection", "yu gi oh")
+
+
+@pytest.mark.parametrize("title, franchise, expected", [
+    ("Disney Lorcana Azurite Sea", None, True),                                  # set name only (Farmers)
+    ("Disney Lorcana Reign of Jafar Illumineer's Trove", None, True),
+    ("Pokemon Trading Card Mega Greninja Ex Prem Coll", None, True),
+    ("Pokemon Trading Card Trainer's Toolkit", None, True),
+    ("Pokemon Trading Card ME5 Pitch Black Booster Bundle", None, True),
+    ("Pokemon Trading Card ME5 Pitch Black Portfolio", None, False),             # accessory
+    ("Pokemon Trading Card Pikachu Toploader & Penny Sleeves", None, False),
+    ("Mega Zeraora ex (114/084) [Mega Evolution: Pitch Black]", "pokemon", False),  # Shopify single
+    ('"A Case for K9" [JUSH-EN040] Super Rare', "yugioh", False),
+    ("Monkey.D.Luffy OP09-118 Secret Rare", "one_piece", False),
+    ("Cards FIFA 365 Adrenalyn XL 2026 Soccer Tin, Assorted", None, False),     # not one of our games
+])
+def test_is_sealed_product(title, franchise, expected):
+    from tcgpings.classify import is_sealed_product
+
+    assert is_sealed_product(title, franchise) is expected

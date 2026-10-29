@@ -25,8 +25,8 @@ PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
     ("booster_bundle", re.compile(r"booster\s*bundle", re.I)),
     ("elite_trainer_box", re.compile(r"elite\s*trainer\s*box|\betb\b", re.I)),
     ("booster_box", re.compile(r"booster\s*(box|display)|\bdisplay\b", re.I)),
-    ("premium_collection", re.compile(r"(premium|ultra[-\s]*premium|super[-\s]*premium)\s*collection", re.I)),
-    ("collection_box", re.compile(r"collection|box\s*set|gift\s*box", re.I)),
+    ("premium_collection", re.compile(r"(premium|ultra[-\s]*premium|super[-\s]*premium)\s*collection|\bprem\.?\s*coll", re.I)),
+    ("collection_box", re.compile(r"collection|box\s*set|gift\s*(box|set)|toolkit|trove", re.I)),
     ("tin", re.compile(r"\btins?\b", re.I)),
     ("blister", re.compile(r"blister|checklane|\b\d\s*-?\s*pack\b", re.I)),
     ("starter_deck", re.compile(r"starter|structure\s*deck|theme\s*deck|battle\s*deck|commander\s*deck|\bdeck\b", re.I)),
@@ -41,6 +41,9 @@ NON_CARD = re.compile(
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b",
     re.I,
 )
+
+# Single cards: collector numbers "(199/165)" / "199/165", set codes "[JUSH-EN040]" / "OP09-118".
+SINGLE_CARD = re.compile(r"\(\s*\d{1,4}\s*/\s*\d{1,4}\s*\)|\b\d{1,3}/\d{2,3}\b|\b[A-Z0-9]{2,5}-[A-Z]{0,2}\d{3}\b")
 
 
 def franchise_of(title: str) -> str | None:
@@ -64,6 +67,17 @@ def classify(title: str) -> tuple[str | None, str | None]:
 def is_card_product(title: str, franchise: str | None = None) -> bool:
     """`franchise` lets an adapter vouch for products whose title doesn't name the game (e.g. via tags)."""
     return (franchise or franchise_of(title)) is not None and not NON_CARD.search(title)
+
+
+def is_sealed_product(title: str, franchise: str | None = None, ptype: str | None = None) -> bool:
+    """Sealed product from one of our games (boxes, bundles, packs, tins, decks, named sets...).
+
+    Discovery uses this so singles ("Charizard ex (199/165)") and accessories (sleeves,
+    portfolios) don't flood channels; explicit keyword watches still see everything. Titles
+    with no recognisable type still count ("Disney Lorcana Azurite Sea" is a set release).
+    """
+    ptype = ptype or ptype_of(title)
+    return is_card_product(title, franchise) and ptype != "accessory" and not SINGLE_CARD.search(title)
 
 
 def matches_query(text: str, query: str) -> bool:

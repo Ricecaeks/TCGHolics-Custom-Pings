@@ -42,6 +42,7 @@ class Product:
     online: Stock | None = None
     franchise: str | None = None
     ptype: str | None = None
+    atc_url: str | None = None  # direct add-to-cart link, when the retailer supports one
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,9 @@ class Event:
     new_qty: int | None = None
     old_price: int | None = None
     new_price: int | None = None
+    atc_url: str | None = None
+    # Store-level events merged into one alert: [{"id": ..., "name": ...}, ...]
+    stores: list = field(default_factory=list)
     extra: dict = field(default_factory=dict)
 
     def to_payload(self) -> dict:

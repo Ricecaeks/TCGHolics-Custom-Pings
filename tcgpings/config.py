@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     default_sku_interval: int = 60
     default_search_interval: int = 300
+    default_discover_interval: int = 180
+    # Store-level tracking for products found by discovery that match a keyword route.
+    max_tracked_per_retailer: int = 150
     store_sync_interval: int = 86_400
     # Repeat alerts for the same product/store/state are suppressed within this window.
     alert_cooldown_seconds: int = 900

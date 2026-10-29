@@ -105,3 +105,20 @@ def test_parse_ref_and_matches_url():
     assert a.parse_ref("op-10-box") == "op-10-box"
     assert a.matches_url("https://www.cardshop.co.nz/products/x")
     assert not a.matches_url("https://othershop.co.nz/products/x")
+
+
+async def test_add_to_cart_links_use_first_available_variant():
+    a = adapter({"https://cardshop.co.nz/products.json": load_fixture("shopify", "products.json")})
+    by_sku = {p.sku: p for p in await a.discover()}
+    assert by_sku["pokemon-30th-celebration-booster-bundle"].atc_url == "https://cardshop.co.nz/cart/1:1"
+    assert by_sku["pokemon-prismatic-evolutions-etb"].atc_url == "https://cardshop.co.nz/cart/2:1"  # none available
+    handle = "pokemon-30th-celebration-booster-bundle"
+    b = adapter({f"https://cardshop.co.nz/products/{handle}.js": load_fixture("shopify", "product.js")})
+    [p] = await b.fetch_products([handle])
+    assert p.atc_url == "https://cardshop.co.nz/cart/1:1"
+
+
+async def test_discover_reads_recent_catalogue_page_only():
+    a = adapter({"https://cardshop.co.nz/products.json": load_fixture("shopify", "products.json")})
+    assert len(await a.discover()) == 3
+    assert [c[1]["page"] for c in a.http.calls] == ["1"]

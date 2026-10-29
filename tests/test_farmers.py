@@ -11,6 +11,7 @@ from tcgpings.retailers.farmers import (
 
 ROW = {"id": "farmers", "adapter": "farmers", "name": "Farmers", "config": {},
        "requests_per_minute": 10, "proxy_policy": "direct", "color": None}
+BROWSER_ROW = dict(ROW, config={"browser": True})
 
 
 def test_store_list_is_complete_and_unique():
@@ -87,7 +88,7 @@ class FakeHttp:
 
 
 def adapter(pages):
-    return FarmersAdapter(ROW, FakeHttp(FakeBrowser(pages)))
+    return FarmersAdapter(BROWSER_ROW, FakeHttp(FakeBrowser(pages)))
 
 
 async def test_store_stock_only_queries_needed_regions():
@@ -108,8 +109,8 @@ async def test_fetch_products_skips_missing_and_raises_blocks():
         await blocked.fetch_products(["7044417"])
 
 
-async def test_needs_browser():
-    a = FarmersAdapter(ROW, FakeHttp(None))
+async def test_browser_mode_needs_the_browser_fetcher():
+    a = FarmersAdapter(BROWSER_ROW, FakeHttp(None))
     with pytest.raises(FetchError, match="browser"):
         await a.search("pokemon")
 
@@ -122,3 +123,54 @@ def test_parse_ref():
     assert a.matches_url("https://www.farmers.co.nz/anything")
     with pytest.raises(ValueError):
         a.parse_ref("https://www.farmers.co.nz/toys")
+
+
+# --- Constructor.io path (default: no browser) ------------------------------------------
+
+
+class FakeJsonHttp:
+    browser = None
+
+    def __init__(self, data):
+        self.data = data
+        self.calls = []
+
+    async def get_json(self, policy, url, params=None, **kw):
+        self.calls.append((url, params))
+        return self.data
+
+
+def test_parse_constructor():
+    from tcgpings.retailers.farmers import parse_constructor
+
+    products = parse_constructor(load_fixture("farmers", "constructor-search.json"))
+    assert [p.sku for p in products] == ["7009966", "7044418", "7044417", "7030224"]
+    first = products[0]
+    assert first.url == "https://www.farmers.co.nz/toys/games-cards-puzzles/trading-cards/pokemon-trading-card-trainers-toolkit-7009966"
+    assert first.image.startswith("https://www.farmers.co.nz/INTERSHOP/") and ":443" not in first.image
+    assert first.online.level is Level.IN and products[1].online.level is Level.OUT
+    assert first.price_cents is None and first.atc_url is None
+
+
+async def test_discover_and_search_use_constructor_without_browser():
+    a = FarmersAdapter(ROW, FakeJsonHttp(load_fixture("farmers", "constructor-search.json")))
+    assert not a.store_stock_enabled
+    found = await a.discover()
+    url, params = a.http.calls[-1]
+    assert url == "https://ac.cnstrc.com/browse/group_id/51-070502"
+    assert params["sort_by"] == "arrivaldate" and params["key"].startswith("key_")
+    assert len(found) == 4
+    await a.search("elite trainer box")
+    assert a.http.calls[-1][0] == "https://ac.cnstrc.com/search/elite%20trainer%20box"
+
+
+async def test_fetch_products_by_sku_via_constructor():
+    a = FarmersAdapter(ROW, FakeJsonHttp(load_fixture("farmers", "constructor-search.json")))
+    [p] = await a.fetch_products(["7044417"])
+    assert p.title == "Pokemon Trading Card Mega Zygarde EX Premium Collection Box"
+    assert await a.fetch_products(["1234567"]) == []
+
+
+def test_browser_mode_enables_store_stock():
+    row = dict(ROW, config={"browser": True})
+    assert FarmersAdapter(row, FakeHttp(FakeBrowser({}))).store_stock_enabled

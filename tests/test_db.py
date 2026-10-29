@@ -152,7 +152,7 @@ async def test_outbox_claim_send_and_retry(pool):
     assert (await queries.outbox_backlog(pool))["pending"] == 0
 
 
-async def test_browser_retailers_are_seeded_disabled_and_operator_choice_sticks(pool):
+async def test_default_retailers_seeded_and_operator_choice_sticks(pool):
     from types import SimpleNamespace
 
     from tcgpings.app import seed_retailers
@@ -160,7 +160,9 @@ async def test_browser_retailers_are_seeded_disabled_and_operator_choice_sticks(
     ctx = SimpleNamespace(pool=pool)
     await seed_retailers(ctx)
     farmers = await queries.get_retailer(pool, "farmers")
-    assert farmers["enabled"] is False and farmers["requests_per_minute"] == 10
-    await queries.update_retailer(pool, "farmers", enabled=True)
-    await seed_retailers(ctx)  # a restart must not switch it back off
-    assert (await queries.get_retailer(pool, "farmers"))["enabled"] is True
+    assert farmers["enabled"] is True and farmers["requests_per_minute"] == 10
+    assert farmers["config"]["browser"] is False  # Constructor mode until Akamai access is proven
+    assert (await queries.get_retailer(pool, "jbhifi"))["config"]["domain"] == "www.jbhifi.co.nz"
+    await queries.update_retailer(pool, "farmers", enabled=False)
+    await seed_retailers(ctx)  # a restart must not switch it back on
+    assert (await queries.get_retailer(pool, "farmers"))["enabled"] is False

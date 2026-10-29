@@ -1,14 +1,19 @@
 """Farmers (farmers.co.nz). Intershop storefront behind Akamai Bot Manager; see docs/RETAILERS.md.
 
-All requests go through the real-browser fetcher (net/browser.py): plain HTTP clients are
-blocked after a couple of requests.
+Two access paths:
 
-- Search:      /filter/0/Page-0-PageSize-96-...?SearchTerm=<q>  (HTML product tiles)
-- Product:     ViewProduct-Start?SKU=<sku>                       (JSON-LD: price, online availability)
-- Store stock: ViewCheckoutShipping-GetAvailableStoresAjax?...&SKU=<sku>&State=<region>
-               one call per region; "In Stock" / "Not In Stock" per store. Farmers refreshes
-               store stock once a day (~8am), so it's checked every few hours at most.
+1. Constructor.io (plain HTTP, always on). Farmers' site search is hosted on ac.cnstrc.com, outside
+   Akamai; TCGHolics approved using Farmers' public client key. Gives discovery of the whole
+   Trading Cards category (newest first), keyword search and online in/out of stock. No prices.
+2. Real browser (config "browser": true). Farmers' own endpoints behind Akamai, fetched from
+   inside Chrome (net/browser.py): price from the product page and per-store stock.
+   - Search:      /filter/0/Page-0-PageSize-96-...?SearchTerm=<q>  (HTML product tiles)
+   - Product:     ViewProduct-Start?SKU=<sku>                       (JSON-LD: price, availability)
+   - Store stock: ViewCheckoutShipping-GetAvailableStoresAjax?...&SKU=<sku>&State=<region>
+                  one call per region; "In Stock" / "Not In Stock" per store. Farmers refreshes
+                  store stock once a day (~8am), so it's checked every few hours at most.
 Stores have no ids on the site, only names; the store id is the slugified name.
+Farmers' add-to-cart is a signed form post, so alerts link to the product page.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import uuid
 from importlib import resources
 from urllib.parse import quote, urlparse
 
@@ -26,6 +32,10 @@ from tcgpings.retailers.base import RetailerAdapter, register
 BASE = "https://www.farmers.co.nz"
 ISH = f"{BASE}/INTERSHOP/web/WFS/Farmers-Shop-Site/en_NZ/-/NZD"
 XHR = {"X-Requested-With": "XMLHttpRequest", "Accept": "text/html, */*; q=0.01"}
+
+CONSTRUCTOR = "https://ac.cnstrc.com"
+CONSTRUCTOR_KEY = "key_wafe8wrKCXfPyWKw"  # public client key embedded in farmers.co.nz pages
+TRADING_CARDS_GROUP = "51-070502"         # Toys > Games, Cards & Puzzles > Trading Cards
 
 AVAILABILITY = {
     "InStock": Level.IN,
@@ -121,6 +131,28 @@ def parse_product(page: str, sku: str, retailer_id: str = "farmers") -> Product 
     return None
 
 
+def parse_constructor(data: dict, retailer_id: str = "farmers") -> list[Product]:
+    products = []
+    for item in (data.get("response") or {}).get("results") or []:
+        d = item.get("data") or {}
+        sku = str(d.get("id") or (d.get("sku") or [None])[0] or "")
+        if not sku:
+            continue
+        status = str(d.get("stockstatus") or d.get("item-stockstatus") or "").lower()
+        level = Level.IN if status == "in stock" else Level.OUT if "out of stock" in status else Level.UNKNOWN
+        url = d.get("url") or ""
+        image = d.get("image_url")
+        products.append(Product(
+            retailer_id=retailer_id,
+            sku=sku,
+            title=html.unescape(item.get("value") or ""),
+            url=url if url.startswith("http") else f"{BASE}/{url.lstrip('/')}",
+            image=image.replace(":443/", "/") if image else None,
+            online=Stock(level),
+        ))
+    return products
+
+
 def parse_store_stock(page: str) -> dict[str, Stock]:
     """Store slug -> stock for one region's response."""
     out: dict[str, Stock] = {}
@@ -139,14 +171,33 @@ class FarmersAdapter(RetailerAdapter):
     store_stock_interval = 4 * 3600
     default_sku_interval = 15 * 60
     default_search_interval = 30 * 60
-    default_retailers = [("farmers", "Farmers", {}, 0x5B2C83)]
+    supports_discovery = True
+    default_discover_interval = 120
+    # "browser": per-store stock and prices through Chrome; off until Akamai access is proven.
+    default_retailers = [("farmers", "Farmers", {"browser": False}, 0x5B2C83)]
     default_requests_per_minute = 10  # be gentle: Akamai scores request bursts
-    default_enabled = False  # turn on with /retailer set retailer:farmers enabled:true
 
     def __init__(self, retailer, http) -> None:
         super().__init__(retailer, http)
         self._stores = load_stores()
         self._region_of = {s["store_id"]: s["region_code"] for s in self._stores}
+        self.use_browser = bool(self.config.get("browser", False))
+        self._cio = {"key": self.config.get("constructor_key", CONSTRUCTOR_KEY), "c": "ciojs-client-2.0",
+                     "i": str(uuid.uuid4()), "s": "1"}
+
+    @property
+    def store_stock_enabled(self) -> bool:
+        return self.use_browser
+
+    async def _constructor(self, path: str, **params: str) -> list[Product]:
+        data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
+        return parse_constructor(data, self.retailer_id)
+
+    async def discover(self) -> list[Product]:
+        return await self._constructor(
+            f"/browse/group_id/{TRADING_CARDS_GROUP}",
+            sort_by="arrivaldate", sort_order="descending", num_results_per_page="200",
+        )
 
     async def _get(self, url: str) -> str:
         if self.http.browser is None:
@@ -154,11 +205,19 @@ class FarmersAdapter(RetailerAdapter):
         return await self.http.browser.fetch_text(self.policy, BASE + "/", url, XHR)
 
     async def search(self, query: str) -> list[Product]:
+        if not self.use_browser:
+            return await self._constructor(f"/search/{quote(query)}", num_results_per_page="100")
         url = (f"{BASE}/filter/0/Page-0-PageSize-96-ExcludeFromKeywordSearchResult-false-"
                f"SortingAttribute-SortBy-asc?SearchTerm={quote(query)}")
         return parse_search(await self._get(url), self.retailer_id)
 
     async def fetch_products(self, skus: list[str]) -> list[Product]:
+        if not self.use_browser:
+            products = []
+            for sku in skus:  # Constructor finds a product by its SKU
+                products += [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
+                             if p.sku == sku]
+            return products
         products = []
         for sku in skus:
             try:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+import zlib
 from typing import Any
 
 import asyncpg
@@ -70,11 +71,43 @@ class Pipeline:
     async def _enqueue(self, conn: asyncpg.Connection, retailer: Any, events: list[Event]) -> None:
         routes = await self.routes.get()
         bucket = int(time.time() // self.cooldown)
+        per_route: dict[int, tuple[Any, list[Event]]] = {}
         for event in events:
             event.extra.update(retailer_name=retailer["name"], retailer_color=retailer["color"])
             matched = match_routes(routes, event)
             if not matched:
                 log.debug("no route for %s %s %s", event.type, event.retailer_id, event.store_id or "online")
-            payload = event.to_payload()
             for route in matched:
-                await queries.enqueue_alert(conn, f"{event.dedupe_key(bucket)}#{route['id']}", route["id"], payload)
+                per_route.setdefault(route["id"], (route, []))[1].append(event)
+
+        for route_id, (route, route_events) in per_route.items():
+            # A channel covering a whole retailer gets one alert listing the stores,
+            # not one alert per store. Per-store channels keep their single-store alerts.
+            outgoing = merge_store_events(route_events) if route["store_id"] is None else route_events
+            for event in outgoing:
+                key = f"{event.dedupe_key(bucket)}#{route_id}"
+                await queries.enqueue_alert(conn, key, route_id, event.to_payload())
+
+
+def merge_store_events(events: list[Event]) -> list[Event]:
+    """Collapse store-level events of the same type for one product into a single event."""
+    out: list[Event] = []
+    groups: dict[tuple, list[Event]] = {}
+    for e in events:
+        if e.store_id == ONLINE:
+            out.append(e)
+        else:
+            groups.setdefault((e.type, e.retailer_id, e.sku), []).append(e)
+    for group in groups.values():
+        if len(group) == 1:
+            out.append(group[0])
+            continue
+        group.sort(key=lambda e: e.store_name or e.store_id)
+        first = group[0]
+        ids = ",".join(e.store_id for e in group)
+        merged = Event.from_payload(first.to_payload())
+        merged.store_id = f"*{zlib.crc32(ids.encode()):08x}"
+        merged.store_name = f"{len(group)} stores"
+        merged.stores = [{"id": e.store_id, "name": e.store_name or e.store_id} for e in group]
+        out.append(merged)
+    return out

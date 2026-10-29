@@ -5,13 +5,13 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Retailer | Adapter | Store-level stock | Status |
 |---|---|---|---|
 | Shopify card shops (any) | `shopify` | — (online only) | **live** |
-| Farmers | `farmers` | yes: In / Not in stock, 53 stores | adapter built and tested on fixtures; **live access blocked by Akamai**, retailer disabled by default (see below) |
-| The Warehouse | `warehouse` | yes (expected) | recon pending |
+| Farmers | `farmers` | yes: In / Not in stock, 53 stores | **live via Constructor.io** (discovery, search, online stock, no price). Price and per-store stock need `"browser": true`, which Akamai currently blocks |
+| The Warehouse | `warehouse` | yes: per store, 76 stores, 15 regions | recon done: listings and stores via plain HTTP; store stock needs a per-product token, and the Pokémon product page is behind a Cloudflare challenge |
 | Noel Leeming | `noelleeming` | yes (expected) | recon pending |
 | Warehouse Stationery | `warehousestationery` | yes (expected) | recon pending (Cloudflare challenge) |
 | Kmart NZ | `kmart` | yes (expected) | recon pending (Akamai) |
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
-| JB Hi-Fi NZ | `jbhifi` | to confirm | recon pending |
+| JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock, add-to-cart). Store names still to map |
 | Toyworld | `toyworld` / `shopify` | to confirm | recon pending (Shopify) |
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
 | Whitcoulls | `whitcoulls` | to confirm | recon pending |
@@ -53,6 +53,53 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - **Request budget:** 10 requests/min.
 - **Not passing Akamai yet.** Plain `curl_cffi` got 2 answers, then 403s. Every automated browser variant was denied as well. Only a real browser with an aged cookie passed. The full table and next steps are in [HOSTING.md §6](HOSTING.md#6-farmers-status-and-next-steps).
 - **Disabled by default:** the `farmers` retailer stays off until enabled with `/retailer set retailer:farmers enabled:true`.
+
+### Farmers via Constructor.io (search + new listings, no browser)
+
+Farmers' site search is hosted by Constructor.io on `ac.cnstrc.com`, which isn't behind Farmers' Akamai. TCGHolics approved using Farmers' public client key (`key_wafe8wrKCXfPyWKw`, embedded in every farmers.co.nz page) on 2026-10-29.
+
+| Call | Returns |
+|---|---|
+| `GET https://ac.cnstrc.com/search/<query>?key=<key>&c=ciojs-client-2.0&i=<client-id>&s=<session>&num_results_per_page=N` | JSON results: `data.id`/`sku`, `url`, `image_url`, `stockstatus` ("In stock" / "Out of stock") |
+| `GET https://ac.cnstrc.com/browse/group_id/51-070502?...&sort_by=arrivaldate&sort_order=descending&num_results_per_page=200` | the whole **Trading Cards** category (47 items), newest first, with online stock. **59 KB in 0.2 s** |
+
+- Sort options: `relevance`, `arrivaldate`, `name`, `productsalepricegross`.
+- **No price** in the response; price still comes from the product page (Akamai).
+- 10 quick repeat calls were all 200. No rate limiting was seen.
+- If the key changes, read it again from any farmers.co.nz page (`key_…` in the HTML).
+
+**Split this gives:** new listings and online stock come from Constructor (plain HTTP, every 1–2 min, about $0). Price and per-store stock still need the Akamai-protected endpoints (browser).
+
+## The Warehouse (recon 2026-10-29)
+
+**Platform:** Salesforce Commerce Cloud (site `Sites-twl-Site`), behind Cloudflare. Product IDs look like `R3083239`, and product URLs are `/p/<slug>/<id>.html`.
+
+| Purpose | Request | Plain HTTP? |
+|---|---|---|
+| Pokémon listing | `/c/official-merchandise/pok%C3%A9mon/pokemon-trading-cards` (HTML tiles with `data-pid` and `data-gtm-product` JSON) | ✅ |
+| Store list | `/on/demandware.store/Sites-twl-Site/default/Stores-FindStores?showMap=false&radius=2000&postalCode=0610`, JSON with **76 stores**, real IDs (e.g. `221` Auckland Central) and `stateCode` regions | ✅ |
+| Store stock | `/products/stores/region?productId=<id>&region=NZ-AUK&verify=<token>` (`Stores-PDPStoreAvailability`), JSON whose `stores` HTML lists each store with `store-availability__IN_STOCK` etc. One call per region (15 regions) | needs `verify` |
+| Product page | `/p/<slug>/<id>.html` | ✅ for normal products; **❌ Pokémon product: Cloudflare challenge** (`cf-mitigated: challenge`, Turnstile "verify you are human"), even in a real browser |
+
+- `verify` is a signed `<timestamp>-<signature>` token printed into each product page. It ties the stock call to that product, so **store stock needs the product page first**.
+- The Warehouse has put its hot Pokémon item ("LIMIT 10 PER CUSTOMER") behind an interactive Cloudflare challenge. The Uno page next to it loads fine.
+- Online availability and new listings come from the category page, which works with plain HTTP.
+- Per-store stock for challenge-protected items isn't reachable without passing Turnstile. That's a human checkbox; we don't automate CAPTCHAs.
+
+## JB Hi-Fi NZ (recon 2026-10-29)
+
+**Platform:** Shopify (`prod-jbhifi-nz.myshopify.com`) behind Cloudflare, with Algolia search. Carries Magic, Final Fantasy, Pokémon and other TCGs; a "pokemon trading card" search returns 1,076 results.
+
+| Purpose | Request | Plain HTTP? |
+|---|---|---|
+| Product + **every store's stock** | the product page HTML embeds the JB product metafield JSON: `Price.DisplayPriceInc`, `Availability.OverallStatus` (`InStock`/`LimitedStock`/…), `ClickNCollectStatus`, and **`AvailabilityInStore.InStockStoreIds`** (e.g. `[21,23,28,…]`) | ✅ (3 of 3 requests OK) |
+| Price + online availability | `/products/<handle>.js` (Shopify standard) | ✅ |
+| Search / category | Algolia index `shopify_products_families` (public search key in the page), or the Shopify collection `/collections/trading-card-games` | not tested yet |
+| Store ID → name | Algolia index `shopify_store_locations` (used by `/pages/store-finder`) | not tested yet |
+
+- **One request per product gives every store's stock.** It's the cheapest store-level retailer so far.
+- Each page is ~620 KB, so check every 2–5 min, not every few seconds.
+- The store ID → name map still needs to be captured: 14 IDs were in stock for the test item.
 
 ## Recon checklist for a new retailer
 

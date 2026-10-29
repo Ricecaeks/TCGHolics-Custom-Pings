@@ -64,7 +64,7 @@ async def deliver(
     content = f"<@&{role_id}>" if role_id else None
     if ctx.settings.dry_run:
         fields = ", ".join(f"{f.name}={f.value}" for f in embed.fields)
-        log.info("[dry-run] %s | %s | %s %s", embed.author.name, embed.title, fields, content or "")
+        log.info("[dry-run] %s | %s | %s | %s %s", embed.author.name, embed.title, embed.description, fields, content or "")
         return
     webhook = discord.Webhook.from_url(webhook_url, session=session)
     await webhook.send(

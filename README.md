@@ -30,6 +30,8 @@ Every node runs the same container. Nodes coordinate only through Postgres:
    docker compose -f deploy/docker-compose.local.yml up -d --build
    ```
 
+**[docs/ALERTS.md](docs/ALERTS.md)** is the staff guide to routes, keywords (e.g. `30th booster bundle, etb, upc, -sleeves`), role pings and add-to-cart links.
+
 **[docs/HOSTING.md](docs/HOSTING.md)** covers resource use, gaming-friendly limits, the always-on laptop with auto-deploy, cloud options and how each retailer's bot protection is handled.
 
 **Several machines (cluster):**

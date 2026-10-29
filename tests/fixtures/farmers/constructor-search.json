@@ -1,0 +1,64 @@
+{
+ "response": {
+  "total_num_results": 20,
+  "results": [
+   {
+    "value": "Pokemon Trading Card Trainer's Toolkit",
+    "data": {
+     "id": "7009966",
+     "sku": [
+      "7009966"
+     ],
+     "url": "toys/games-cards-puzzles/trading-cards/pokemon-trading-card-trainers-toolkit-7009966",
+     "image_url": "https://www.farmers.co.nz:443/INTERSHOP/static/WFS/Farmers-Shop-Site/-/Farmers-Shop/en_NZ/product/70/09/966/7009966_00_W350_H456.jpg",
+     "stockstatus": "In stock",
+     "manufacturername": "Pokemon Trading Card",
+     "categorynamelevel2": "Trading Cards"
+    }
+   },
+   {
+    "value": "Pokemon Trading Card ME4 Chaos Rising Blister, Assorted",
+    "data": {
+     "id": "7044418",
+     "sku": [
+      "7044418"
+     ],
+     "url": "toys/games-cards-puzzles/trading-cards/pokemon-trading-card-me-4-chaos-rising-blister-assorted-7044418",
+     "image_url": "https://www.farmers.co.nz:443/INTERSHOP/static/WFS/Farmers-Shop-Site/-/Farmers-Shop/en_NZ/product/70/44/418/7044418_00_W350_H456.jpg",
+     "stockstatus": "Out of stock",
+     "manufacturername": "Pokemon Trading Card",
+     "categorynamelevel2": "Trading Cards"
+    }
+   },
+   {
+    "value": "Pokemon Trading Card Mega Zygarde EX Premium Collection Box",
+    "data": {
+     "id": "7044417",
+     "sku": [
+      "7044417"
+     ],
+     "url": "toys/games-cards-puzzles/trading-cards/pokemon-trading-card-mega-zygarde-ex-premium-collection-box-7044417",
+     "image_url": "https://www.farmers.co.nz:443/INTERSHOP/static/WFS/Farmers-Shop-Site/-/Farmers-Shop/en_NZ/product/70/44/417/7044417_00_W350_H456.jpg",
+     "stockstatus": "In stock",
+     "manufacturername": "Pokemon Trading Card",
+     "categorynamelevel2": "Trading Cards"
+    }
+   },
+   {
+    "value": "Pokemon Trading Card Me3 Perfect Order Blister, Assorted",
+    "data": {
+     "id": "7030224",
+     "sku": [
+      "7030224"
+     ],
+     "url": "toys/games-cards-puzzles/trading-cards/pokemon-trading-card-me-3-perfect-order-blister-assorted-7030224",
+     "image_url": "https://www.farmers.co.nz:443/INTERSHOP/static/WFS/Farmers-Shop-Site/-/Farmers-Shop/en_NZ/product/70/30/224/7030224_00_W350_H456.jpg",
+     "stockstatus": "In stock",
+     "manufacturername": "Pokemon Trading Card",
+     "categorynamelevel2": "Trading Cards"
+    }
+   }
+  ]
+ },
+ "_source": "Trimmed from ac.cnstrc.com/search/pokemon%20booster%20bundle (Farmers key) on 2026-10-29; result 2 stock edited to 'Out of stock'"
+}
