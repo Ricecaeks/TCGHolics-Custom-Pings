@@ -1,0 +1,83 @@
+{
+ "response": {
+  "total_num_results": 5,
+  "results": [
+   {
+    "value": "Topps Flagship Premier League 2027 Trading Cards",
+    "data": {
+     "id": "P_43846443",
+     "url": "/product/topps-flagship-premier-league-2027-trading-cards-43846443/",
+     "image_url": "https://assets.kmart.com.au/transform/ccce3b0c-1205-40f6-971e-b61f146b5860/43846443-1?io=transform:extend,width:580,height:725",
+     "price": 10.5,
+     "FulfilmentChannel": 3,
+     "nationalInventory": false,
+     "variation_id": "43846443"
+    }
+   },
+   {
+    "value": "Topps Formula 1 Turbo Attax 2026 Trading Card Game Mega Tin - Assorted",
+    "data": {
+     "id": "P_43829248",
+     "url": "/product/topps-formula-1-turbo-attax-2026-trading-card-game-mega-tin-assorted-43829248/",
+     "image_url": "https://assets.kmart.com.au/transform/5eb205d9-c18d-4f82-a31c-9c690aa53e32/43829248-1?io=transform:extend,width:580,height:725",
+     "price": 45,
+     "FulfilmentChannel": 3,
+     "nationalInventory": false,
+     "stateOOS": {
+      "NI": "6"
+     },
+     "variation_id": "43829248"
+    }
+   },
+   {
+    "value": "Konami Yu-Gi-Oh! Trading Card Game: Beyond the Brave 9 Card Booster",
+    "data": {
+     "id": "P_43818273",
+     "url": "/product/konami-yu-gi-oh!-trading-card-game:-beyond-the-brave-9-card-booster-43818273/",
+     "image_url": "https://assets.kmart.com.au/transform/fd21427c-b234-4bc7-9c20-dc64de881017/43818273-1?io=transform:extend,width:580,height:725",
+     "price": 9.5,
+     "FulfilmentChannel": 3,
+     "nationalInventory": false,
+     "variation_id": "43818273",
+     "Brand": "Konami"
+    }
+   },
+   {
+    "value": "Pokemon TCG: 30th Celebration Booster Bundle",
+    "data": {
+     "id": "P_43818617",
+     "url": "/product/pokemon-tcg:-30th-celebration-booster-bundle-43818617/",
+     "image_url": "https://assets.kmart.com.au/transform/06b8ecc7-734c-465a-99da-e3d5635947c0/43818617-1?io=transform:extend,width:580,height:725",
+     "price": 65,
+     "FulfilmentChannel": 2,
+     "nationalInventory": false,
+     "stateOOS": {
+      "NI": "6",
+      "SI": "6"
+     },
+     "variation_id": "43818617",
+     "Brand": "Pokemon"
+    }
+   },
+   {
+    "value": "Pokemon Trading Card Game: Mega Evolution Pitch Black Booster Bundle",
+    "data": {
+     "id": "P_43788798",
+     "url": "/product/pokemon-trading-card-game:-mega-evolution-pitch-black-booster-bundle-43788798/",
+     "image_url": "https://assets.kmart.com.au/transform/38dfadea-6bd6-4616-97a3-608fd266743a/43788798-1?io=transform:extend,width:580,height:725",
+     "price": 62,
+     "FulfilmentChannel": 2,
+     "nationalInventory": false,
+     "stateOOS": {
+      "SI": "6"
+     },
+     "variation_id": "43788798",
+     "Brand": "Pokemon"
+    }
+   }
+  ]
+ },
+ "request": {
+  "page": 1
+ }
+}

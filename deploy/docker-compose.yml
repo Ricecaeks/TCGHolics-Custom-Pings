@@ -1,0 +1,20 @@
+# One node. Identical on every NUC; only NODE_NAME in ../.env differs.
+#   docker compose -f deploy/docker-compose.yml up -d --build
+name: tcgpings
+
+services:
+  tcgpings:
+    image: tcgpings:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: ../.env
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes:
+      - ../data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

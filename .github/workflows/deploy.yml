@@ -1,0 +1,61 @@
+# Continuous deploy to the always-on machine through a GitHub self-hosted runner.
+# That machine (GGPC) needs a runner for this repo with the label "tcgpings" (see docs/HOSTING.md).
+# The runner's working copy is separate from any repo you edit by hand; .env lives in TCGPINGS_HOME.
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, tcgpings]
+    env:
+      # Folder on the runner machine holding .env and data/, outside the checkout so it
+      # survives deploys. Set it as a repository variable, e.g. C:/tcgpings.
+      TCGPINGS_HOME: ${{ vars.TCGPINGS_HOME }}
+      TCGPINGS_ENV: ${{ vars.TCGPINGS_HOME }}/.env
+      TCGPINGS_DATA: ${{ vars.TCGPINGS_HOME }}/data
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check persistent config
+        shell: bash
+        run: |
+          test -n "$TCGPINGS_HOME" || { echo "Set the TCGPINGS_HOME repository variable"; exit 1; }
+          test -f "$TCGPINGS_ENV" || { echo "Missing $TCGPINGS_ENV"; exit 1; }
+          mkdir -p "$TCGPINGS_DATA"
+      - name: Copy unblocker keys into .env
+        shell: bash
+        env:
+          SCRAPFLY_API_KEY: ${{ secrets.SCRAPFLY_API_KEY }}
+          ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
+        run: |
+          # A secret that isn't set leaves any value already in .env alone.
+          [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
+          for name in SCRAPFLY_API_KEY ZYTE_API_KEY; do
+            value="${!name}"
+            [ -n "$value" ] || continue
+            sed -i "/^$name=/d" "$TCGPINGS_ENV"
+            printf '%s=%s\n' "$name" "$value" >> "$TCGPINGS_ENV"
+          done
+      - name: Build and restart
+        shell: bash
+        run: |
+          docker compose -f deploy/docker-compose.local.yml -p tcgpings-local build
+          docker compose -f deploy/docker-compose.local.yml -p tcgpings-local up -d
+      - name: Wait for healthy
+        shell: bash
+        run: |
+          for i in $(seq 1 36); do
+            s=$(docker inspect -f '{{.State.Health.Status}}' tcgpings-local-node-1 || true)
+            [ "$s" = healthy ] && exit 0
+            sleep 5
+          done
+          docker compose -f deploy/docker-compose.local.yml -p tcgpings-local logs --tail 100 node
+          exit 1
