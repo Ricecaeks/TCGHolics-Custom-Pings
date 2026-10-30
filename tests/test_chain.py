@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from tcgpings.cluster.worker import daily_check_due
-from tcgpings.net.chain import Cooldowns, FetchChain, MemoryChainStore
+from tcgpings.net.chain import BrowserBackend, Cooldowns, FetchChain, MemoryChainStore
 from tcgpings.net.http import Blocked, FetchError, NetPolicy
 from tcgpings.net.unblock import ProviderError, ScrapFlyBackend, ZyteBackend
 
@@ -116,6 +116,17 @@ async def test_unconfigured_routes_are_skipped():
     assert c.available(["browser", "scrapfly", "zyte"]) == ["browser"]
     with pytest.raises(FetchError, match="no fetch route"):
         await c.fetch_text(POLICY, "o", URL, order=["zyte"])
+
+
+async def test_browser_crash_is_a_route_failure_and_the_next_route_answers():
+    class CrashingFetcher:
+        async def fetch_text(self, policy, origin, url, headers):
+            raise RuntimeError("Target page, context or browser has been closed")
+
+    zyte = Route("zyte", [PAGE])
+    c = chain(BrowserBackend(CrashingFetcher()), zyte)
+    assert await c.fetch_text(POLICY, "o", URL) == PAGE
+    assert c.store.failures[("farmers", "browser")] == 1
 
 
 # --- the unblocker clients, against fake HTTP sessions ------------------------------------

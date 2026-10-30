@@ -50,7 +50,12 @@ class BrowserBackend:
         self.fetcher = fetcher
 
     async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None) -> tuple[str, float]:
-        return await self.fetcher.fetch_text(policy, origin, url, headers), 0.0
+        try:
+            return await self.fetcher.fetch_text(policy, origin, url, headers), 0.0
+        except FetchError:
+            raise
+        except Exception as exc:  # Chrome crashed or wouldn't start: a failed route, not a failed job
+            raise FetchError(f"browser: {type(exc).__name__}: {exc}") from exc
 
 
 class ChainStore(Protocol):
