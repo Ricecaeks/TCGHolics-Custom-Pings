@@ -40,7 +40,7 @@ jobs:
         env:
           SCRAPFLY_API_KEY: ${{ secrets.SCRAPFLY_API_KEY }}
           ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
-          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          ALERT_WEBHOOK_URL: ${{ secrets.TEST_CHANNEL_WEBHOOK }}
         run: |
           # A secret that isn't set leaves any value already in .env alone.
           [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
