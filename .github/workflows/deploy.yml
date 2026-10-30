@@ -19,7 +19,7 @@ jobs:
     defaults:
       run:
         # Plain "bash" can resolve to WSL's bash.exe in System32 on Windows.
-        shell: '"C:\Program Files\Gitinash.exe" --noprofile --norc -e -o pipefail {0}'
+        shell: '"C:/Program Files/Git/bin/bash.exe" --noprofile --norc -e -o pipefail {0}'
     env:
       # Folder on the runner machine holding .env and data/, outside the checkout so it
       # survives deploys. Set it as a repository variable, e.g. C:/tcgpings.
