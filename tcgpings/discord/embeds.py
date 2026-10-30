@@ -7,6 +7,9 @@ import discord
 from tcgpings.classify import FRANCHISE_NAMES
 from tcgpings.models import Event, EventType, Level, Stock, format_price
 
+# Shown in the footer, because Discord's Compact mode hides the webhook's own picture.
+LOGO_URL = "https://raw.githubusercontent.com/Ricecaeks/TCGHolics-Custom-Pings/main/assets/logo.png"
+
 TITLES = {
     EventType.NEW_PRODUCT: "🆕 New listing",
     EventType.RESTOCK: "✅ Restock",
@@ -67,7 +70,7 @@ def build_embed(event: Event) -> discord.Embed:
         embed.add_field(name="Note", value=event.extra["note"])
     if event.franchise:
         embed.add_field(name="Game", value=FRANCHISE_NAMES.get(event.franchise, event.franchise))
-    embed.set_footer(text=f"TCGHolics Pings · {event.sku}")
+    embed.set_footer(text=f"TCGHolics Pings · {event.sku}", icon_url=LOGO_URL)
     return embed
 
 
