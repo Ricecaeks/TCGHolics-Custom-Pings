@@ -11,7 +11,6 @@ from tcgpings.retailers.farmers import (
 
 ROW = {"id": "farmers", "adapter": "farmers", "name": "Farmers", "config": {},
        "requests_per_minute": 10, "proxy_policy": "direct", "color": None}
-BROWSER_ROW = dict(ROW, config={"browser": True})
 
 
 def test_store_list_is_complete_and_unique():
@@ -67,52 +66,83 @@ def test_store_level(text, level):
     assert store_level(text) is level
 
 
-class FakeBrowser:
-    def __init__(self, pages):
+class FakeChain:
+    """Stands in for net/chain.py: answers from canned pages, records the URLs and route order."""
+
+    def __init__(self, pages, budget_low=False):
         self.pages = pages
         self.urls = []
+        self.orders = []
+        self.low = budget_low
 
-    async def fetch_text(self, policy, origin, url, headers=None):
+    def available(self, order):
+        return list(order)
+
+    async def budget_low(self):
+        return self.low
+
+    async def fetch_text(self, policy, origin, url, headers=None, order=None):
         self.urls.append(url)
+        self.orders.append(order)
         for key, value in self.pages.items():
             if key in url:
                 if isinstance(value, Exception):
                     raise value
                 return value
-        raise FetchError(f"GET {url}: HTTP 404")
+        raise FetchError(f"GET {url}: HTTP 404", 404)
 
 
 class FakeHttp:
-    def __init__(self, browser):
-        self.browser = browser
+    def __init__(self, chain):
+        self.chain = chain
 
 
-def adapter(pages):
-    return FarmersAdapter(BROWSER_ROW, FakeHttp(FakeBrowser(pages)))
+def adapter(pages, config=None, budget_low=False):
+    return FarmersAdapter(dict(ROW, config=config or {}), FakeHttp(FakeChain(pages, budget_low)))
+
+
+STORE_PAGES = {"State=AUK": load_fixture("farmers", "stores-AUK.html"),
+               "State=NTL": load_fixture("farmers", "stores-NTL.html")}
 
 
 async def test_store_stock_only_queries_needed_regions():
-    a = adapter({"State=AUK": load_fixture("farmers", "stores-AUK.html"),
-                 "State=NTL": load_fixture("farmers", "stores-NTL.html")})
+    a = adapter(STORE_PAGES)
     stock = await a.store_stock("7044417", ["northwest", "albany", "kaitaia"])
     assert set(stock) == {"northwest", "albany", "kaitaia"}
     assert stock["albany"].level is Level.IN
-    regions = sorted(u.split("State=")[1] for u in a.http.browser.urls)
+    regions = sorted(u.split("State=")[1] for u in a.http.chain.urls)
     assert regions == ["AUK", "NTL"]
+    assert a.http.chain.orders[0] == ["browser", "scrapfly", "zyte"]
 
 
-async def test_fetch_products_skips_missing_and_raises_blocks():
+async def test_low_budget_keeps_only_priority_regions():
+    a = adapter(STORE_PAGES, budget_low=True)
+    stock = await a.store_stock("7044417", ["northwest", "albany", "kaitaia"])
+    assert set(stock) == {"northwest", "albany"}  # Kaitaia (Northland) waits for next month
+    assert [u.split("State=")[1] for u in a.http.chain.urls] == ["AUK"]
+
+
+async def test_configured_regions_and_route_order():
+    a = adapter(STORE_PAGES, config={"regions": ["NTL"], "fetch": ["scrapfly"]})
+    assert set(await a.store_stock("7044417", ["albany", "kaitaia"])) == {"kaitaia"}
+    assert a.http.chain.orders == [["scrapfly"]]
+
+
+async def test_refresh_details_takes_price_from_product_page():
+    from tcgpings.models import Product
+
     a = adapter({"SKU=7044417": load_fixture("farmers", "product.html")})
-    assert [p.sku for p in await a.fetch_products(["7044417", "9999999"])] == ["7044417"]
+    p = Product("farmers", "7044417", "Zygarde", "https://x", None, None, None)
+    await a.refresh_details(p)
+    assert p.price_cents == 9999 and p.image
     blocked = adapter({"SKU=": Blocked("denied")})
-    with pytest.raises(Blocked):
-        await blocked.fetch_products(["7044417"])
+    await blocked.refresh_details(p)  # no route got through: keeps what it had
+    assert p.price_cents == 9999
 
 
-async def test_browser_mode_needs_the_browser_fetcher():
-    a = FarmersAdapter(BROWSER_ROW, FakeHttp(None))
-    with pytest.raises(FetchError, match="browser"):
-        await a.search("pokemon")
+def test_store_stock_needs_a_fetch_chain():
+    assert not FarmersAdapter(ROW, FakeHttp(None)).store_stock_enabled
+    assert adapter({}).store_stock_enabled
 
 
 def test_parse_ref():
@@ -169,8 +199,3 @@ async def test_fetch_products_by_sku_via_constructor():
     [p] = await a.fetch_products(["7044417"])
     assert p.title == "Pokemon Trading Card Mega Zygarde EX Premium Collection Box"
     assert await a.fetch_products(["1234567"]) == []
-
-
-def test_browser_mode_enables_store_stock():
-    row = dict(ROW, config={"browser": True})
-    assert FarmersAdapter(row, FakeHttp(FakeBrowser({}))).store_stock_enabled

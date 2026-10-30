@@ -33,21 +33,30 @@ async def _probe(args: argparse.Namespace) -> None:
 
     if args.adapter not in REGISTRY:
         raise SystemExit(f"unknown adapter {args.adapter!r}; known: {', '.join(REGISTRY)}")
-    config = dict(kv.split("=", 1) for kv in args.set)
+    defaults = REGISTRY[args.adapter].default_retailers
+    config = dict(defaults[0][2]) if defaults else {}
+    for key, value in (kv.split("=", 1) for kv in args.set):
+        try:
+            config[key] = json.loads(value)  # fetch='["zyte"]', discover_pages=2
+        except ValueError:
+            config[key] = value  # domain=x.co.nz
     row = {
         "id": args.adapter, "adapter": args.adapter, "name": args.adapter, "config": config,
         "requests_per_minute": args.rpm, "proxy_policy": "pool" if args.proxy else "direct", "color": None,
     }
     from tcgpings.net.proxies import ProxyPool
 
+    from tcgpings.app import build_chain
     from tcgpings.config import Settings
     from tcgpings.net.browser import BrowserFetcher
+    from tcgpings.net.chain import MemoryChainStore
 
     settings = Settings()
     async with HttpClient(ProxyPool([args.proxy] if args.proxy else [])) as http:
         http.browser = BrowserFetcher(
             settings.browser_profile_dir, http.limiter, settings.browser_headless, settings.browser_channel
         )
+        http.chain = build_chain(settings, MemoryChainStore(), http)  # fetch='["scrapfly"]' tests one route
         adapter = build_adapter(row, http)
         started = time.monotonic()
         if args.action == "search":

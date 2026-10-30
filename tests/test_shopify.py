@@ -122,3 +122,14 @@ async def test_discover_reads_recent_catalogue_page_only():
     a = adapter({"https://cardshop.co.nz/products.json": load_fixture("shopify", "products.json")})
     assert len(await a.discover()) == 3
     assert [c[1]["page"] for c in a.http.calls] == ["1"]
+
+
+async def test_discover_reads_only_configured_collections():
+    from tcgpings.retailers.toyworld import ToyworldAdapter
+
+    rid, name, config, _ = ToyworldAdapter.default_retailers[0]
+    products = load_fixture("shopify", "products.json")
+    routes = {f"https://www.toyworld.co.nz/collections/{h}/products.json": products for h in config["collections"]}
+    a = ToyworldAdapter({**ROW, "id": rid, "adapter": "toyworld", "name": name, "config": config}, FakeHttp(routes))
+    assert len(await a.discover()) == 3  # same products in both collections, counted once
+    assert [c[0] for c in a.http.calls] == list(routes)

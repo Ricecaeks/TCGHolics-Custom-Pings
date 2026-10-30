@@ -20,8 +20,10 @@ from tcgpings.discord.sender import sender_loop
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
 from tcgpings.net.browser import BrowserFetcher
+from tcgpings.net.chain import BrowserBackend, ChainStore, Cooldowns, DbChainStore, FetchChain
 from tcgpings.net.http import HttpClient
 from tcgpings.net.proxies import ProxyPool
+from tcgpings.net.unblock import ScrapFlyBackend, ZyteBackend
 from tcgpings.retailers import REGISTRY
 
 log = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ async def build_context(settings: Settings) -> Context:
         settings.browser_profile_dir, http.limiter, settings.browser_headless,
         settings.browser_channel, settings.browser_idle_seconds,
     )
+    http.chain = build_chain(settings, DbChainStore(pool), http)
     routes = RouteCache(pool)
     return Context(
         settings=settings,
@@ -49,6 +52,24 @@ async def build_context(settings: Settings) -> Context:
         routes=routes,
         pipeline=Pipeline(pool, routes, settings.alert_cooldown_seconds),
         node_name=settings.node_name,
+    )
+
+
+def build_chain(settings: Settings, store: ChainStore, http: HttpClient) -> FetchChain:
+    """Our Chrome first, then each unblocker whose API key is set."""
+    backends = [BrowserBackend(http.browser)]
+    if settings.scrapfly_api_key:
+        backends.append(ScrapFlyBackend(
+            settings.scrapfly_api_key, settings.scrapfly_country, settings.scrapfly_usd_per_credit,
+            settings.scrapfly_cost_budget, settings.node_name,
+        ))
+    if settings.zyte_api_key:
+        backends.append(ZyteBackend(settings.zyte_api_key, settings.zyte_geolocation, settings.zyte_usd_per_request))
+    log.info("fetch chain: %s", " -> ".join(b.name for b in backends))
+    return FetchChain(
+        backends, store, http.limiter,
+        settings.unblocker_monthly_budget_usd, settings.unblocker_low_budget_ratio,
+        Cooldowns(settings.browser_block_cooldown, settings.unblocker_block_cooldown),
     )
 
 

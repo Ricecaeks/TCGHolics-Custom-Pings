@@ -63,6 +63,8 @@ def build_embed(event: Event) -> discord.Embed:
         embed.add_field(name=f"Stores ({len(names)})", value=shown[:1024], inline=False)
     else:
         embed.add_field(name="Store", value=where)
+    if event.extra.get("note"):
+        embed.add_field(name="Note", value=event.extra["note"])
     if event.franchise:
         embed.add_field(name="Game", value=FRANCHISE_NAMES.get(event.franchise, event.franchise))
     embed.set_footer(text=f"TCGHolics Pings · {event.sku}")

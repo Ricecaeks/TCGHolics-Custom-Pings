@@ -537,6 +537,90 @@ async def proxy_failed(db: DB, url: str, cooldown_seconds: float) -> None:
     )
 
 
+# --- fetch chain: circuit breakers and unblocker spend ----------------------------------
+
+
+async def breaker_open(db: DB, retailer_id: str, backend: str) -> bool:
+    return bool(await db.fetchval(
+        "SELECT open_until > now() FROM fetch_breakers WHERE retailer_id = $1 AND backend = $2",
+        retailer_id, backend,
+    ))
+
+
+async def trip_breaker(db: DB, retailer_id: str, backend: str, seconds: float, error: str) -> None:
+    await db.execute(
+        """
+        INSERT INTO fetch_breakers (retailer_id, backend, open_until, failures, last_error)
+        VALUES ($1, $2, now() + make_interval(secs => $3), 0, $4)
+        ON CONFLICT (retailer_id, backend) DO UPDATE SET
+            open_until = EXCLUDED.open_until, failures = 0, last_error = EXCLUDED.last_error, updated_at = now()
+        """,
+        retailer_id, backend, float(seconds), error,
+    )
+
+
+async def breaker_failure(db: DB, retailer_id: str, backend: str, error: str, threshold: int, seconds: float) -> None:
+    """Count a failure; the `threshold`-th in a row opens the breaker for `seconds`."""
+    await db.execute(
+        """
+        INSERT INTO fetch_breakers (retailer_id, backend, failures, last_error) VALUES ($1, $2, 1, $3)
+        ON CONFLICT (retailer_id, backend) DO UPDATE SET
+            failures = CASE WHEN fetch_breakers.failures + 1 >= $4 THEN 0 ELSE fetch_breakers.failures + 1 END,
+            open_until = CASE WHEN fetch_breakers.failures + 1 >= $4
+                              THEN now() + make_interval(secs => $5) ELSE fetch_breakers.open_until END,
+            last_error = EXCLUDED.last_error, updated_at = now()
+        """,
+        retailer_id, backend, error, threshold, float(seconds),
+    )
+
+
+async def breaker_ok(db: DB, retailer_id: str, backend: str) -> None:
+    await db.execute(
+        """
+        INSERT INTO fetch_breakers (retailer_id, backend, last_ok_at) VALUES ($1, $2, now())
+        ON CONFLICT (retailer_id, backend) DO UPDATE SET
+            open_until = NULL, failures = 0, last_ok_at = now(), updated_at = now()
+        """,
+        retailer_id, backend,
+    )
+
+
+async def list_breakers(db: DB) -> list[asyncpg.Record]:
+    return await db.fetch(
+        """
+        SELECT *, coalesce(open_until > now(), false) AS is_open,
+               extract(epoch FROM open_until - now())::float8 AS open_seconds
+        FROM fetch_breakers ORDER BY retailer_id, backend
+        """
+    )
+
+
+async def add_spend(db: DB, backend: str, usd: float) -> None:
+    await db.execute(
+        """
+        INSERT INTO unblocker_spend (month, backend, requests, cost_usd)
+        VALUES (date_trunc('month', now() AT TIME ZONE 'UTC')::date, $1, 1, $2)
+        ON CONFLICT (month, backend) DO UPDATE SET
+            requests = unblocker_spend.requests + 1, cost_usd = unblocker_spend.cost_usd + EXCLUDED.cost_usd
+        """,
+        backend, float(usd),
+    )
+
+
+async def month_spend(db: DB) -> float:
+    return float(await db.fetchval(
+        "SELECT coalesce(sum(cost_usd), 0) FROM unblocker_spend"
+        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date"
+    ))
+
+
+async def month_spend_by_backend(db: DB) -> list[asyncpg.Record]:
+    return await db.fetch(
+        "SELECT backend, requests, cost_usd FROM unblocker_spend"
+        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date ORDER BY backend"
+    )
+
+
 # --- maintenance -----------------------------------------------------------------------
 
 

@@ -10,7 +10,7 @@ Do steps 1–3 once. Do step 4 on every NUC.
    - Leave all *Privileged Gateway Intents* off. The bot doesn't need them.
 3. **OAuth2 → URL Generator**:
    - Scopes: `bot`, `applications.commands`.
-   - Bot permissions: **View Channels**, **Send Messages**, **Embed Links**, **Manage Webhooks**. Add **Manage Channels** if you want `/route autocreate` to create the per-store channels for you.
+   - Bot permissions: **View Channels**, **Send Messages**, **Embed Links**, **Manage Webhooks**. **Manage Channels** lets the bot create the categories and channels for you.
    - Open the generated URL and add the bot to the TCGHolics server.
 4. In Discord, turn on *User Settings → Advanced → Developer Mode*, then right-click to copy IDs:
    - the server → `GUILD_ID`
@@ -97,4 +97,4 @@ In Discord, as staff:
 4. `/watch add query:pokemon booster bundle`. The first check records a silent baseline. After that, anything new, restocked or changed price triggers an alert.
 5. `/status` shows every node, retailer and the alert queue.
 
-For store-level retailers such as Farmers, run `/route autocreate retailer:farmers` once the adapter exists. It creates a channel per store, such as `#farmers-westgate`, and wires up its route.
+Run `/setup` to preview, then `/setup confirm:True`. It creates an online and an in-store channel per retailer (such as `#farmers-online` and `#farmers-instore`), one channel per online-only shop, and wires up each webhook and route. Once the bot is running it does this by itself for newly enabled retailers. See [ALERTS.md](ALERTS.md).

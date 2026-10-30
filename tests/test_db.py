@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from tcgpings.db import queries
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
@@ -108,6 +110,44 @@ async def test_state_change_alerts_once_per_matching_route(pool):
     assert changes == 4  # 2 baselines + 2 changes
 
 
+async def test_instore_channel_gets_one_alert_listing_the_stores(pool):
+    from tcgpings.models import ANY_STORE, ONLINE
+
+    await seed(pool, routes=[{"retailer_id": "farmers", "store_id": ONLINE},
+                             {"retailer_id": "farmers", "store_id": ANY_STORE}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    out = {"albany": Stock(Level.OUT), "northwest": Stock(Level.OUT), "sylvia-park": Stock(Level.OUT)}
+    await pipe.record(RETAILER, product(Level.OUT), out)
+    back = {"albany": Stock(Level.IN), "northwest": Stock(Level.IN), "sylvia-park": Stock(Level.OUT)}
+    names = {"albany": "Albany", "northwest": "Northwest"}
+    await pipe.record(RETAILER, product(Level.IN), back, names)
+    rows = await outbox(pool)
+    assert [r["route_id"] for r in rows] == [1, 2]  # #farmers-online, then one #farmers-instore alert
+    assert rows[0]["payload"]["store_id"] == ONLINE
+    assert [s["name"] for s in rows[1]["payload"]["stores"]] == ["Albany", "Northwest"]
+
+
+async def test_fetch_breakers_and_spend(pool):
+    await seed(pool)
+    assert not await queries.breaker_open(pool, "farmers", "browser")
+    await queries.trip_breaker(pool, "farmers", "browser", 3600, "WAF_Deny_Page")
+    assert await queries.breaker_open(pool, "farmers", "browser")
+    await queries.breaker_ok(pool, "farmers", "browser")
+    assert not await queries.breaker_open(pool, "farmers", "browser")
+    for _ in range(2):
+        await queries.breaker_failure(pool, "farmers", "scrapfly", "timeout", 3, 1800)
+    assert not await queries.breaker_open(pool, "farmers", "scrapfly")
+    await queries.breaker_failure(pool, "farmers", "scrapfly", "timeout", 3, 1800)
+    [_, scrapfly] = await queries.list_breakers(pool)
+    assert scrapfly["is_open"] and 1700 < scrapfly["open_seconds"] <= 1800
+    await queries.add_spend(pool, "scrapfly", 0.0045)
+    await queries.add_spend(pool, "scrapfly", 0.0045)
+    await queries.add_spend(pool, "zyte", 0.00127)
+    assert await queries.month_spend(pool) == pytest.approx(0.01027)
+    assert [(r["backend"], r["requests"]) for r in await queries.month_spend_by_backend(pool)] == [
+        ("scrapfly", 2), ("zyte", 1)]
+
+
 async def test_concurrent_observers_produce_one_alert(pool):
     await seed(pool, routes=[{}])
     pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
@@ -161,7 +201,7 @@ async def test_default_retailers_seeded_and_operator_choice_sticks(pool):
     await seed_retailers(ctx)
     farmers = await queries.get_retailer(pool, "farmers")
     assert farmers["enabled"] is True and farmers["requests_per_minute"] == 10
-    assert farmers["config"]["browser"] is False  # Constructor mode until Akamai access is proven
+    assert farmers["config"]["fetch"] == ["browser", "scrapfly", "zyte"]  # the self-healing route order
     assert (await queries.get_retailer(pool, "jbhifi"))["config"]["domain"] == "www.jbhifi.co.nz"
     await queries.update_retailer(pool, "farmers", enabled=False)
     await seed_retailers(ctx)  # a restart must not switch it back on

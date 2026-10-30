@@ -21,6 +21,7 @@ def _event(kind: EventType, product: Product, store_id: str, store_name: str | N
         atc_url=product.atc_url,
         store_id=store_id,
         store_name=store_name,
+        extra={"note": product.note} if product.note else {},
         **kw,
     )
 

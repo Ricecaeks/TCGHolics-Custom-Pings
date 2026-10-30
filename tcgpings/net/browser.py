@@ -91,7 +91,7 @@ class BrowserFetcher:
                     continue
                 if status == 200:
                     return text
-                raise FetchError(f"GET {url}: HTTP {status}")
+                raise FetchError(f"GET {url}: HTTP {status}", status)
         raise Blocked(f"GET {url}: blocked by bot protection")
 
     async def _session(self, retailer_id: str, origin: str) -> _Session:

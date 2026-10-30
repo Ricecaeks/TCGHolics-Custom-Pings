@@ -6,14 +6,17 @@ from typing import Any
 
 from tcgpings.db import queries
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.models import DEFAULT_EVENT_TYPES, Event
+from tcgpings.models import ANY_STORE, DEFAULT_EVENT_TYPES, ONLINE, Event
 
 
 def route_matches(route: Mapping[str, Any], event: Event) -> bool:
-    """NULL filters match anything; store_id '' matches only online events."""
+    """NULL filters match anything; store_id '' matches only online events, '*' only store events."""
     if route["retailer_id"] is not None and route["retailer_id"] != event.retailer_id:
         return False
-    if route["store_id"] is not None and route["store_id"] != event.store_id:
+    if route["store_id"] == ANY_STORE:
+        if event.store_id == ONLINE:
+            return False
+    elif route["store_id"] is not None and route["store_id"] != event.store_id:
         return False
     if route["franchise"] is not None and route["franchise"] != event.franchise:
         return False

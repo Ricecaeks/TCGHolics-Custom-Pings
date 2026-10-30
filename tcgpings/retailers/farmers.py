@@ -5,13 +5,13 @@ Two access paths:
 1. Constructor.io (plain HTTP, always on). Farmers' site search is hosted on ac.cnstrc.com, outside
    Akamai; TCGHolics approved using Farmers' public client key. Gives discovery of the whole
    Trading Cards category (newest first), keyword search and online in/out of stock. No prices.
-2. Real browser (config "browser": true). Farmers' own endpoints behind Akamai, fetched from
-   inside Chrome (net/browser.py): price from the product page and per-store stock.
-   - Search:      /filter/0/Page-0-PageSize-96-...?SearchTerm=<q>  (HTML product tiles)
-   - Product:     ViewProduct-Start?SKU=<sku>                       (JSON-LD: price, availability)
+2. The fetch chain (net/chain.py): our own Chrome first, then ScrapFly, then Zyte, for Farmers'
+   own endpoints behind Akamai. Used once a day per tracked product, after the ~8am store refresh:
+   - Product:     ViewProduct-Start?SKU=<sku>                       (JSON-LD: price)
    - Store stock: ViewCheckoutShipping-GetAvailableStoresAjax?...&SKU=<sku>&State=<region>
-                  one call per region; "In Stock" / "Not In Stock" per store. Farmers refreshes
-                  store stock once a day (~8am), so it's checked every few hours at most.
+                  one call per region; "In Stock" / "Not In Stock" per store.
+   Config "fetch" sets the route order, "regions" limits the regions checked (default: all 13),
+   and "priority_regions" is what's kept once the unblocker budget runs low (default: Auckland).
 Stores have no ids on the site, only names; the store id is the slugified name.
 Farmers' add-to-cart is a signed form post, so alerts link to the product page.
 """
@@ -21,13 +21,17 @@ from __future__ import annotations
 import html
 import json
 import re
+import logging
 import uuid
+from datetime import time
 from importlib import resources
 from urllib.parse import quote, urlparse
 
 from tcgpings.models import Level, Product, Stock, Store, slugify, to_cents
 from tcgpings.net.http import FetchError
 from tcgpings.retailers.base import RetailerAdapter, register
+
+log = logging.getLogger(__name__)
 
 BASE = "https://www.farmers.co.nz"
 ISH = f"{BASE}/INTERSHOP/web/WFS/Farmers-Shop-Site/en_NZ/-/NZD"
@@ -36,6 +40,8 @@ XHR = {"X-Requested-With": "XMLHttpRequest", "Accept": "text/html, */*; q=0.01"}
 CONSTRUCTOR = "https://ac.cnstrc.com"
 CONSTRUCTOR_KEY = "key_wafe8wrKCXfPyWKw"  # public client key embedded in farmers.co.nz pages
 TRADING_CARDS_GROUP = "51-070502"         # Toys > Games, Cards & Puzzles > Trading Cards
+FETCH_ORDER = ["browser", "scrapfly", "zyte"]
+PRIORITY_REGIONS = ["AUK"]
 
 AVAILABILITY = {
     "InStock": Level.IN,
@@ -167,27 +173,32 @@ def parse_store_stock(page: str) -> dict[str, Stock]:
 class FarmersAdapter(RetailerAdapter):
     adapter_name = "farmers"
     supports_store_stock = True
-    # Store stock refreshes once a day (~8am); a 13-region sweep every 4h catches it.
-    store_stock_interval = 4 * 3600
+    # Store stock refreshes once a day (~8am), so each product is checked once a day after that.
+    store_stock_daily_at = time(8, 30)
     default_sku_interval = 15 * 60
     default_search_interval = 30 * 60
     supports_discovery = True
     default_discover_interval = 120
-    # "browser": per-store stock and prices through Chrome; off until Akamai access is proven.
-    default_retailers = [("farmers", "Farmers", {"browser": False}, 0x5B2C83)]
+    default_retailers = [("farmers", "Farmers", {"fetch": FETCH_ORDER}, 0x5B2C83)]
     default_requests_per_minute = 10  # be gentle: Akamai scores request bursts
 
     def __init__(self, retailer, http) -> None:
         super().__init__(retailer, http)
         self._stores = load_stores()
         self._region_of = {s["store_id"]: s["region_code"] for s in self._stores}
-        self.use_browser = bool(self.config.get("browser", False))
+        self.fetch_order = list(self.config.get("fetch") or FETCH_ORDER)
+        self.regions = self.config.get("regions")  # None = all
+        self.priority_regions = list(self.config.get("priority_regions") or PRIORITY_REGIONS)
         self._cio = {"key": self.config.get("constructor_key", CONSTRUCTOR_KEY), "c": "ciojs-client-2.0",
                      "i": str(uuid.uuid4()), "s": "1"}
 
     @property
+    def _chain(self):
+        return getattr(self.http, "chain", None)
+
+    @property
     def store_stock_enabled(self) -> bool:
-        return self.use_browser
+        return self._chain is not None and bool(self._chain.available(self.fetch_order))
 
     async def _constructor(self, path: str, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
@@ -200,45 +211,49 @@ class FarmersAdapter(RetailerAdapter):
         )
 
     async def _get(self, url: str) -> str:
-        if self.http.browser is None:
-            raise FetchError("farmers needs the browser fetcher (Chrome) but it isn't enabled on this node")
-        return await self.http.browser.fetch_text(self.policy, BASE + "/", url, XHR)
+        if self._chain is None:
+            raise FetchError("farmers needs the fetch chain (browser or unblocker) but this node has none")
+        return await self._chain.fetch_text(self.policy, BASE + "/", url, XHR, self.fetch_order)
 
     async def search(self, query: str) -> list[Product]:
-        if not self.use_browser:
-            return await self._constructor(f"/search/{quote(query)}", num_results_per_page="100")
-        url = (f"{BASE}/filter/0/Page-0-PageSize-96-ExcludeFromKeywordSearchResult-false-"
-               f"SortingAttribute-SortBy-asc?SearchTerm={quote(query)}")
-        return parse_search(await self._get(url), self.retailer_id)
+        return await self._constructor(f"/search/{quote(query)}", num_results_per_page="100")
 
     async def fetch_products(self, skus: list[str]) -> list[Product]:
-        if not self.use_browser:
-            products = []
-            for sku in skus:  # Constructor finds a product by its SKU
-                products += [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
-                             if p.sku == sku]
-            return products
         products = []
-        for sku in skus:
-            try:
-                page = await self._get(f"{ISH}/ViewProduct-Start?SKU={quote(sku)}")
-            except FetchError as exc:
-                if "HTTP 404" in str(exc):
-                    continue
-                raise
-            product = parse_product(page, sku, self.retailer_id)
-            if product:
-                products.append(product)
+        for sku in skus:  # Constructor finds a product by its SKU
+            products += [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
+                         if p.sku == sku]
         return products
+
+    async def refresh_details(self, product: Product) -> None:
+        """Price from the product page (Constructor has none); skipped quietly if it can't be fetched."""
+        try:
+            page = await self._get(f"{ISH}/ViewProduct-Start?SKU={quote(product.sku)}")
+        except FetchError as exc:
+            log.info("farmers: no price for %s: %s", product.sku, exc)
+            return
+        details = parse_product(page, product.sku, self.retailer_id)
+        if details:
+            product.price_cents = details.price_cents
+            product.image = product.image or details.image
+
+    async def _regions_to_check(self) -> set[str] | None:
+        """None = no limit. Once the unblocker budget runs low, only the priority regions."""
+        regions = set(self.regions) if self.regions else None
+        if self._chain is not None and await self._chain.budget_low():
+            regions = (regions or set(self._region_of.values())) & set(self.priority_regions)
+        return regions
 
     async def list_stores(self) -> list[Store]:
         return [Store(self.retailer_id, s["store_id"], s["name"], s["region"]) for s in self._stores]
 
     async def store_stock(self, sku: str, store_ids: list[str]) -> dict[str, Stock]:
         wanted = set(store_ids)
-        regions = sorted({self._region_of[s] for s in wanted if s in self._region_of})
+        regions = {self._region_of[s] for s in wanted if s in self._region_of}
+        if (allowed := await self._regions_to_check()) is not None:
+            regions &= allowed
         stock: dict[str, Stock] = {}
-        for region in regions:
+        for region in sorted(regions):
             url = (f"{ISH}/ViewCheckoutShipping-GetAvailableStoresAjax"
                    f"?CountryCode=NZ&NoShippingFilter=true&SKU={quote(sku)}&State={region}")
             for store_id, s in parse_store_stock(await self._get(url)).items():

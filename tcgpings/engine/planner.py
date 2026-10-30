@@ -32,7 +32,7 @@ def plan_jobs(
 
     for r in retailers:
         cls = REGISTRY[r["adapter"]]
-        if cls.supports_store_stock:
+        if cls.supports_store_stock or cls.stock_in_listings:
             key = f"stores:{r['id']}"
             jobs[key] = dict(key=key, kind="sync_stores", retailer_id=r["id"], payload={}, interval=store_sync_interval)
         if cls.supports_discovery:

@@ -1,7 +1,7 @@
 import tcgpings.retailers  # noqa: F401  (registers adapters)
 from tcgpings.engine.planner import plan_jobs
 from tcgpings.engine.router import match_routes, route_matches
-from tcgpings.models import ONLINE, Event, EventType
+from tcgpings.models import ANY_STORE, ONLINE, Event, EventType
 from tcgpings.retailers.base import REGISTRY, RetailerAdapter, register
 
 
@@ -26,6 +26,14 @@ def test_online_only_route():
     online = route(retailer_id="farmers", store_id=ONLINE)
     assert route_matches(online, event(store=ONLINE))
     assert not route_matches(online, event(store="westgate"))
+
+
+def test_instore_route_gets_every_store_but_not_online():
+    instore = route(retailer_id="kmart", store_id=ANY_STORE)
+    assert route_matches(instore, event(retailer="kmart", store="NI"))
+    assert route_matches(instore, event(retailer="kmart", store="SI"))
+    assert not route_matches(instore, event(retailer="kmart", store=ONLINE))
+    assert not route_matches(instore, event(retailer="farmers", store="NI"))
 
 
 def test_franchise_filter_and_catch_all():

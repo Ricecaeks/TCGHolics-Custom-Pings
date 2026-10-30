@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 
@@ -12,9 +13,10 @@ from tcgpings.classify import FRANCHISE_NAMES
 from tcgpings.cluster.leadership import reconcile
 from tcgpings.context import Context
 from tcgpings.db import queries
+from tcgpings.discord import setup
 from tcgpings.discord.embeds import sample_event
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.models import ONLINE, EventType, slugify
+from tcgpings.models import ANY_STORE, ONLINE, EventType, slugify
 from tcgpings.retailers import REGISTRY, build_adapter
 
 log = logging.getLogger(__name__)
@@ -22,7 +24,6 @@ log = logging.getLogger(__name__)
 WEBHOOK_NAME = "TCGHolics Pings"
 FRANCHISE_CHOICES = [app_commands.Choice(name=v, value=k) for k, v in FRANCHISE_NAMES.items()]
 EVENT_NAMES = {e.value for e in EventType}
-MAX_CHANNELS_PER_CATEGORY = 50
 
 
 def _ctx(interaction: discord.Interaction) -> Context:
@@ -66,7 +67,9 @@ async def store_autocomplete(interaction: discord.Interaction, current: str) -> 
         return []
     stores = await queries.list_stores(_ctx(interaction).pool, retailer_id)
     current = current.lower()
-    choices = [app_commands.Choice(name="Online only", value="online")] if "online".startswith(current) else []
+    choices = [app_commands.Choice(name=name, value=value)
+               for name, value in (("Online only", "online"), ("In-store, every store", "instore"))
+               if value.startswith(current)]
     choices += [
         app_commands.Choice(name=s["name"], value=s["store_id"])
         for s in stores
@@ -86,7 +89,7 @@ async def _resolve_stores(ctx: Context, retailer_id: str, refs: str) -> tuple[li
 
 
 def _describe_route(r) -> str:
-    store = "online" if r["store_id"] == ONLINE else (r["store_id"] or "any store")
+    store = {ONLINE: "online", ANY_STORE: "in-store", None: "online + stores"}.get(r["store_id"], r["store_id"])
     events = ", ".join(r["event_types"]) if r["event_types"] else "default events"
     role = f" · <@&{r['role_id']}>" if r["role_id"] else ""
     keywords = f"\n  ↳ keywords: `{r['keywords']}`" if r.get("keywords") else ""
@@ -211,7 +214,7 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
     @app_commands.command(name="set", description="Send matching alerts to this channel")
     @app_commands.describe(
         retailer="Only this retailer (default: any)",
-        store="Only this store, or 'online' (default: any store and online)",
+        store="A store, 'online', or 'instore' for every store (default: online and stores)",
         franchise="Only this game (default: any)",
         events="Comma list of: new_product, restock, qty_change, price_change, out_of_stock "
                "(default: all except out_of_stock)",
@@ -243,6 +246,8 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         if store:
             if store.lower() == "online":
                 store_id = ONLINE
+            elif store.lower() in ("instore", "in-store"):
+                store_id = ANY_STORE
             else:
                 found = await queries.resolve_store(ctx.pool, retailer, store)
                 if not found:
@@ -291,41 +296,74 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         ctx.routes.invalidate()
         await _reply(interaction, f"Removed route #{route_id}.")
 
-    @app_commands.command(name="autocreate", description="Create one channel per store for a retailer, with routes")
+    @app_commands.command(name="autocreate", description="Create one retailer's channels (same as /setup retailer:<x>)")
     @app_commands.autocomplete(retailer=retailer_autocomplete)
     async def autocreate(self, interaction: discord.Interaction, retailer: str, role: discord.Role | None = None) -> None:
-        ctx = _ctx(interaction)
-        guild = interaction.guild
-        row = await queries.get_retailer(ctx.pool, retailer)
-        if row is None or guild is None:
-            return await _reply(interaction, f"Unknown retailer `{retailer}`.")
-        stores = await queries.list_stores(ctx.pool, retailer)
-        if not stores:
-            return await _reply(interaction, f"No stores known for `{retailer}` yet (store sync runs on startup).")
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await _run_setup(interaction, retailer, role, confirm=True)
 
-        existing = {r["channel_id"]: r for r in await queries.list_routes(ctx.pool)}
-        prefix = slugify(row["name"])
-        created = routed = 0
-        for start in range(0, len(stores), MAX_CHANNELS_PER_CATEGORY):
-            chunk = stores[start : start + MAX_CHANNELS_PER_CATEGORY]
-            suffix = f" {start // MAX_CHANNELS_PER_CATEGORY + 1}" if len(stores) > MAX_CHANNELS_PER_CATEGORY else ""
-            cat_name = f"{row['name']}{suffix}"
-            category = discord.utils.get(guild.categories, name=cat_name) or await guild.create_category(cat_name)
-            for s in chunk:
-                name = f"{prefix}-{s['slug']}"[:100]
-                channel = discord.utils.get(category.text_channels, name=name)
-                if channel is None:
-                    channel = await category.create_text_channel(name, topic=f"{row['name']} {s['name']} stock alerts")
-                    created += 1
-                route = existing.get(channel.id)
-                if route and route["retailer_id"] == retailer and route["store_id"] == s["store_id"]:
-                    continue
-                hook = await _webhook_for(channel, interaction.client.user)
-                await queries.add_route(ctx.pool, channel.id, hook.url, retailer, s["store_id"], role_id=role.id if role else None)
-                routed += 1
+
+async def _run_setup(
+    interaction: discord.Interaction, retailer: str | None, role: discord.Role | None, confirm: bool
+) -> None:
+    ctx = _ctx(interaction)
+    guild = interaction.guild
+    if guild is None:
+        return await _reply(interaction, "Run this in the server.")
+    if retailer:
+        row = await queries.get_retailer(ctx.pool, retailer)
+        if row is None:
+            return await _reply(interaction, f"Unknown retailer `{retailer}`.")
+        retailers = [row]
+    else:
+        retailers = await queries.list_retailers(ctx.pool, enabled_only=True)
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    plans = setup.plan_layout(retailers)
+    routes = await queries.list_routes(ctx.pool)
+    if not confirm:
+        return await _reply(interaction, setup.describe_plan(plans, guild, routes)
+                            + "\nRun again with `confirm:True` to build it.")
+    if extra := setup.over_limit(guild, plans, routes):
+        return await _reply(interaction, f"That would go {extra} channels past Discord's {setup.MAX_GUILD_CHANNELS}"
+                            "-channel server limit. Set up fewer retailers at a time, or remove unused channels.")
+
+    me = interaction.client.user
+    role_id = role.id if role else None
+
+    async def add_route(plan: setup.ChannelPlan, channel: discord.TextChannel, url: str) -> None:
+        await queries.add_route(ctx.pool, channel.id, url, plan.retailer_id, plan.store_id, role_id=role_id)
+
+    async def progress(text: str) -> None:
+        with contextlib.suppress(discord.HTTPException):
+            await interaction.edit_original_response(content=text)
+
+    try:
+        result = await setup.apply_layout(guild, plans, routes, lambda ch: _webhook_for(ch, me), add_route, progress)
+    finally:
         ctx.routes.invalidate()
-        await _reply(interaction, f"{created} channels created, {routed} routes added for {row['name']}.")
+    await _reply(interaction, result.summary() + "\nAdmins can move or rename these channels freely; alerts follow them.")
+
+
+async def auto_setup(ctx: Context, guild: discord.Guild, me: discord.abc.User) -> setup.SetupResult | str | None:
+    """The leader's periodic /setup for every enabled retailer. Returns what changed, why it
+    couldn't run, or None when everything was already in place."""
+    plans = setup.plan_layout(await queries.list_retailers(ctx.pool, enabled_only=True))
+    routes = await queries.list_routes(ctx.pool)
+    new_channels, _, _ = setup.pending_work(guild, plans, routes)
+    live = {c.id for c in guild.channels}
+    routed = {(r["retailer_id"], r["store_id"]) for r in routes if r["channel_id"] in live}
+    if not new_channels and all((ch.retailer_id, ch.store_id) in routed for p in plans for ch in p.channels):
+        return None
+    if extra := setup.over_limit(guild, plans, routes):
+        return f"Auto-setup paused: new channels would go {extra} past Discord's {setup.MAX_GUILD_CHANNELS}-channel limit"
+
+    async def add_route(plan: setup.ChannelPlan, channel: discord.TextChannel, url: str) -> None:
+        await queries.add_route(ctx.pool, channel.id, url, plan.retailer_id, plan.store_id)
+
+    try:
+        return await setup.apply_layout(guild, plans, routes, lambda ch: _webhook_for(ch, me), add_route)
+    finally:
+        ctx.routes.invalidate()
 
 
 # --- /retailer -------------------------------------------------------------------------
@@ -378,6 +416,21 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
 # --- single commands -------------------------------------------------------------------
 
 
+@app_commands.command(name="setup", description="Create categories, channels, webhooks and routes for every retailer")
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.describe(
+    confirm="False (default) previews the layout; True builds it",
+    retailer="Only this retailer (default: every enabled retailer)",
+    role="Role to ping with every alert from these channels",
+)
+@app_commands.autocomplete(retailer=retailer_autocomplete)
+async def setup_cmd(
+    interaction: discord.Interaction, confirm: bool = False, retailer: str | None = None, role: discord.Role | None = None
+) -> None:
+    await _run_setup(interaction, retailer, role, confirm)
+
+
 @app_commands.command(name="stores", description="List a retailer's stores")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
@@ -420,6 +473,15 @@ async def status_cmd(interaction: discord.Interaction) -> None:
         f"\n**Database** {size:.0f} MB / warn at {s.db_size_warn_mb} MB"
         f"\n**Proxies** {len(ctx.http.proxies.healthy())}/{len(ctx.http.proxies.urls)} healthy"
     )
+    if ctx.http.chain is not None:
+        lines.append(f"\n**Fetch chain** {' → '.join(ctx.http.chain.backends)}")
+        for b in await queries.list_breakers(ctx.pool):
+            state = f"resting {int(b['open_seconds'] // 60)} min" if b["is_open"] else "ok"
+            lines.append(f"{'🔴' if b['is_open'] else '🟢'} `{b['retailer_id']}` {b['backend']}: {state}")
+        spend = await queries.month_spend_by_backend(ctx.pool)
+        total = sum(r["cost_usd"] for r in spend)
+        detail = ", ".join(f"{r['backend']} {r['requests']} req ${r['cost_usd']:.2f}" for r in spend) or "nothing yet"
+        lines.append(f"**Unblocker spend** ${total:.2f} / ${s.unblocker_monthly_budget_usd:.2f} this month ({detail})")
     await _reply(interaction, "\n".join(lines))
 
 
@@ -457,7 +519,7 @@ async def test_alert_cmd(interaction: discord.Interaction) -> None:
 def register(tree: app_commands.CommandTree) -> None:
     for group in (WatchGroup(), RouteGroup(), RetailerGroup()):
         tree.add_command(group)
-    for cmd in (stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd):
+    for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd):
         tree.add_command(cmd)
 
     async def check(interaction: discord.Interaction) -> bool:

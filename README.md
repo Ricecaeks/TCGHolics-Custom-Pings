@@ -1,13 +1,13 @@
 # TCGHolics Custom Pings
 
-Monitors NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lorcana, Yu-Gi-Oh!) and posts alerts to the [TCGHolics](https://tcgholics.co.nz) Discord. Alerts are routed per retailer and per physical store. For example, a stock change for Pokémon 30th Booster Bundles at Farmers Westgate goes to `#farmers-westgate`.
+Monitors NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lorcana, Yu-Gi-Oh!) and posts alerts to the [TCGHolics](https://tcgholics.co.nz) Discord. Alerts are routed per retailer, online and in store. For example, Pokémon 30th Booster Bundles coming back at Farmers Westgate and Albany is one alert in `#farmers-instore` listing both stores.
 
 **Alert types:** new listing · restock · stock-quantity increase · price change · out of stock (opt-in)
 
 ## How it works
 
 ```
- NUC 1 ─┐                                   ┌─> Discord webhooks (#farmers-westgate, ...)
+ NUC 1 ─┐                                   ┌─> Discord webhooks (#farmers-instore, ...)
  NUC 2 ─┼──>  Supabase Postgres  <──────────┤
  NUC 3 ─┘   (jobs, state, outbox)           └─> Discord bot (slash commands, leader only)
 ```
@@ -49,7 +49,7 @@ Every node runs the same container. Nodes coordinate only through Postgres:
    - `/watch add query:pokemon booster bundle`
    - `/test-alert`
 
-Day-to-day running is covered in **[docs/OPERATIONS.md](docs/OPERATIONS.md)**: adding nodes, `/status`, proxies, updates and backups. **[docs/RETAILERS.md](docs/RETAILERS.md)** lists each retailer's status.
+Day-to-day running is covered in **[docs/OPERATIONS.md](docs/OPERATIONS.md)**: adding nodes, `/status`, proxies, updates and backups. **[docs/RETAILERS.md](docs/RETAILERS.md)** lists each retailer's status, and **[docs/ROADMAP.md](docs/ROADMAP.md)** what's next, including the parked unblocker add-on.
 
 ## Development
 

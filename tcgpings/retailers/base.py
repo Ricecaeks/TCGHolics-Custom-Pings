@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import time
 from typing import Any, ClassVar
 
 from tcgpings.models import Product, Stock, Store
@@ -22,6 +23,9 @@ class RetailerAdapter(ABC):
     # Minimum seconds between store-level checks of one product (0 = every run). Retailers whose
     # store stock only refreshes daily don't need hammering every minute.
     store_stock_interval: ClassVar[int] = 0
+    # Retailers that refresh store stock at a set time each day (NZ time): each product is checked
+    # once a day after it, spread over the following hour. Takes the place of store_stock_interval.
+    store_stock_daily_at: ClassVar[time | None] = None
     # Retailer rows created automatically at startup: (id, name, config, color).
     default_retailers: ClassVar[list[tuple[str, str, dict, int | None]]] = []
     # Whether those rows start enabled. Retailers that need special access (real browser,
@@ -65,6 +69,10 @@ class RetailerAdapter(ABC):
     # so it's worth calling before the store list is known.
     store_stock_discovers_stores: ClassVar[bool] = False
 
+    # True when listings already carry store-level stock (Product.stores), so the store list is
+    # synced but no per-product store calls are made.
+    stock_in_listings: ClassVar[bool] = False
+
     def store_label(self, store_id: str) -> str:
         """Display name for a store id the store list doesn't know yet."""
         return f"Store {store_id}"
@@ -74,6 +82,9 @@ class RetailerAdapter(ABC):
 
     async def store_stock(self, sku: str, store_ids: list[str]) -> dict[str, Stock]:
         raise NotImplementedError
+
+    async def refresh_details(self, product: Product) -> None:
+        """Fill in details the cheap listing lacks (e.g. Farmers' price), alongside each store check."""
 
     def parse_ref(self, ref: str) -> str:
         """Turn a product URL (or a bare SKU) into this retailer's SKU."""

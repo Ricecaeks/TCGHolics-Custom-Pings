@@ -17,7 +17,7 @@ from tcgpings.classify import classify
 from tcgpings.db import queries
 from tcgpings.engine.diff import diff_state, new_product_event
 from tcgpings.engine.router import RouteCache, match_routes
-from tcgpings.models import ONLINE, Event, Level, Product, Stock
+from tcgpings.models import ANY_STORE, ONLINE, Event, Level, Product, Stock
 
 log = logging.getLogger(__name__)
 
@@ -81,9 +81,10 @@ class Pipeline:
                 per_route.setdefault(route["id"], (route, []))[1].append(event)
 
         for route_id, (route, route_events) in per_route.items():
-            # A channel covering a whole retailer gets one alert listing the stores,
-            # not one alert per store. Per-store channels keep their single-store alerts.
-            outgoing = merge_store_events(route_events) if route["store_id"] is None else route_events
+            # A channel covering a retailer's stores (#kmart-instore, or the whole retailer) gets one
+            # alert listing the stores, not one alert per store. Single-store routes keep theirs.
+            merge = route["store_id"] is None or route["store_id"] == ANY_STORE
+            outgoing = merge_store_events(route_events) if merge else route_events
             for event in outgoing:
                 key = f"{event.dedupe_key(bucket)}#{route_id}"
                 await queries.enqueue_alert(conn, key, route_id, event.to_payload())

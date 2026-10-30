@@ -38,16 +38,21 @@ class ShopifyAdapter(RetailerAdapter):
         self.discover_pages = int(self.config.get("discover_pages", 1))
 
     async def discover(self) -> list[Product]:
-        found: list[Product] = []
-        for page in range(1, self.discover_pages + 1):
-            data = await self.http.get_json(
-                self.policy, f"{self.base}/products.json", params={"limit": "250", "page": str(page)}
-            )
-            products = data.get("products") or []
-            found += [self.parse_catalogue_product(raw) for raw in products]
-            if len(products) < 250:
-                break
-        return found
+        # Shops whose TCG range is a small part of a big catalogue (toy chains) set
+        # config.collections to read just those collections instead of the store-wide feed.
+        feeds = [f"/collections/{h}/products.json" for h in self.config.get("collections") or []] or ["/products.json"]
+        found: dict[str, Product] = {}
+        for feed in feeds:
+            for page in range(1, self.discover_pages + 1):
+                data = await self.http.get_json(
+                    self.policy, f"{self.base}{feed}", params={"limit": "250", "page": str(page)}
+                )
+                products = data.get("products") or []
+                for raw in products:
+                    found.setdefault(raw["handle"], self.parse_catalogue_product(raw))
+                if len(products) < 250:
+                    break
+        return list(found.values())
 
     def cart_url(self, variant_id) -> str | None:
         """Shopify cart permalink: adds one unit and opens the cart."""

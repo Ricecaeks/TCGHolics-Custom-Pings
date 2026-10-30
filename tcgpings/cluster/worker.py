@@ -5,7 +5,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import zlib
+from datetime import datetime, timedelta
+from datetime import time as dt_time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from tcgpings.classify import is_card_product, is_sealed_product
 from tcgpings.context import Context
@@ -14,10 +18,36 @@ from tcgpings.engine.pipeline import classify_product
 from tcgpings.engine.planner import sku_job_key
 from tcgpings.engine.router import keyword_routes_match
 from tcgpings.models import Store
+from tcgpings.net.http import Blocked
 
 log = logging.getLogger(__name__)
 
+
 POLL_SECONDS = 2
+NZ = ZoneInfo("Pacific/Auckland")
+DAILY_SPREAD_SECONDS = 3600
+
+
+def _listed_stock(adapter: Any, product: Any) -> tuple[dict | None, dict | None]:
+    """Store-level stock that came with the listing itself (Kmart's islands), with display names."""
+    if not product.stores:
+        return None, None
+    return product.stores, {sid: adapter.store_label(sid) for sid in product.stores}
+
+
+def daily_check_due(age: float | None, now: datetime, at: dt_time, sku: str) -> bool:
+    """Has this product's store stock been checked since today's refresh (`at` plus its own offset)?
+
+    Each SKU gets a fixed offset within the hour after `at`, so a retailer's daily sweep is
+    spread out instead of every product hitting the site at once.
+    """
+    if age is None:
+        return True
+    offset = timedelta(seconds=zlib.crc32(sku.encode()) % DAILY_SPREAD_SECONDS)
+    slot = datetime.combine(now.date(), at, now.tzinfo) + offset
+    if slot > now:
+        slot -= timedelta(days=1)
+    return now - timedelta(seconds=age) < slot
 
 
 class Worker:
@@ -99,9 +129,11 @@ class Worker:
         return ids, names
 
     async def _store_check_due(self, adapter: Any, sku: str) -> bool:
-        if not adapter.store_stock_interval:
+        if not adapter.store_stock_interval and not adapter.store_stock_daily_at:
             return True
         age = await queries.seconds_since_store_check(self.ctx.pool, adapter.retailer_id, sku)
+        if adapter.store_stock_daily_at:
+            return daily_check_due(age, datetime.now(NZ), adapter.store_stock_daily_at, sku)
         return age is None or age >= adapter.store_stock_interval
 
     async def _watch_sku(self, job: Any) -> None:
@@ -117,13 +149,23 @@ class Worker:
             wanted = payload.get("store_ids")
             ids, names = await self._store_ids(job["retailer_id"], wanted)
             if ids or (wanted is None and adapter.store_stock_discovers_stores):
-                stock = await adapter.store_stock(product.sku, ids)
-                new = [Store(adapter.retailer_id, sid, adapter.store_label(sid)) for sid in stock if sid not in names]
-                if new:
-                    await queries.upsert_stores(self.ctx.pool, new)
-                    names.update({s.store_id: s.name for s in new})
-                if wanted is not None:
-                    stock = {sid: s for sid, s in stock.items() if sid in wanted}
+                try:
+                    stock = await adapter.store_stock(product.sku, ids)
+                except Blocked as exc:
+                    # Every route is resting: keep the online stock coming and retry next run.
+                    log.info("%s: store check for %s skipped: %s", adapter.retailer_id, product.sku, exc)
+                    stock = None
+                else:
+                    if stock:  # once per store check, so a day's checks don't repeat it
+                        await adapter.refresh_details(product)
+                    new = [Store(adapter.retailer_id, sid, adapter.store_label(sid)) for sid in stock if sid not in names]
+                    if new:
+                        await queries.upsert_stores(self.ctx.pool, new)
+                        names.update({s.store_id: s.name for s in new})
+                    if wanted is not None:
+                        stock = {sid: s for sid, s in stock.items() if sid in wanted}
+        if stock is None:
+            stock, names = _listed_stock(adapter, product)
         await self.ctx.pipeline.record(retailer, product, stock, names, announce_new=False)
 
     async def _discover(self, job: Any) -> None:
@@ -137,7 +179,7 @@ class Worker:
             classify_product(product)
             if not is_sealed_product(product.title, product.franchise, product.ptype):
                 continue
-            await self.ctx.pipeline.record(retailer, product, announce_new=announce)
+            await self.ctx.pipeline.record(retailer, product, *_listed_stock(adapter, product), announce_new=announce)
             kept += 1
             if adapter.store_stock_enabled and keyword_routes_match(routes, adapter.retailer_id, product.title):
                 wanted.append(product.sku)
@@ -182,7 +224,7 @@ class Worker:
             classify_product(product)
             if franchise and product.franchise != franchise:
                 continue
-            await self.ctx.pipeline.record(retailer, product, announce_new=announce)
+            await self.ctx.pipeline.record(retailer, product, *_listed_stock(adapter, product), announce_new=announce)
             kept += 1
             if adapter.store_stock_enabled:
                 # Found products get their own store-level job, owned by the watch.

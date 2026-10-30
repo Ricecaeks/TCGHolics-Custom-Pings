@@ -1,5 +1,5 @@
 # Continuous deploy to the always-on machine through a GitHub self-hosted runner.
-# Install the runner on that machine as a service with the label "tcgpings" (see docs/HOSTING.md).
+# That machine (GGPC) needs a runner for this repo with the label "tcgpings" (see docs/HOSTING.md).
 # The runner's working copy is separate from any repo you edit by hand; .env lives in TCGPINGS_HOME.
 name: deploy
 
@@ -30,6 +30,20 @@ jobs:
           test -n "$TCGPINGS_HOME" || { echo "Set the TCGPINGS_HOME repository variable"; exit 1; }
           test -f "$TCGPINGS_ENV" || { echo "Missing $TCGPINGS_ENV"; exit 1; }
           mkdir -p "$TCGPINGS_DATA"
+      - name: Copy unblocker keys into .env
+        shell: bash
+        env:
+          SCRAPFLY_API_KEY: ${{ secrets.SCRAPFLY_API_KEY }}
+          ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
+        run: |
+          # A secret that isn't set leaves any value already in .env alone.
+          [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
+          for name in SCRAPFLY_API_KEY ZYTE_API_KEY; do
+            value="${!name}"
+            [ -n "$value" ] || continue
+            sed -i "/^$name=/d" "$TCGPINGS_ENV"
+            printf '%s=%s\n' "$name" "$value" >> "$TCGPINGS_ENV"
+          done
       - name: Build and restart
         shell: bash
         run: |

@@ -23,7 +23,10 @@ PROXY_BAN_SECONDS = 600
 
 
 class FetchError(Exception):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        # The retailer's own HTTP status when it answered (e.g. 404), None for network/route failures.
+        self.status = status
 
 
 class Blocked(FetchError):
@@ -54,8 +57,10 @@ class HttpClient:
         self._on_ban = on_ban
         self._impersonate = impersonate
         self._session: AsyncSession | None = None
-        # Set by the app when browser-backed adapters are available (see net/browser.py).
+        # Set by the app when browser-backed adapters are available (see net/browser.py), and the
+        # fetch chain that falls back from that browser to paid unblockers (net/chain.py).
         self.browser = None
+        self.chain = None
 
     async def __aenter__(self) -> HttpClient:
         return self
@@ -70,6 +75,8 @@ class HttpClient:
         return self._session
 
     async def close(self) -> None:
+        if self.chain is not None:
+            await self.chain.close()
         if self.browser is not None:
             await self.browser.close()
         if self._session is not None:
@@ -109,7 +116,7 @@ class HttpClient:
                 elif resp.status_code >= 500:
                     last_error = FetchError(f"{method} {url}: HTTP {resp.status_code}")
                 else:
-                    raise FetchError(f"{method} {url}: HTTP {resp.status_code}")
+                    raise FetchError(f"{method} {url}: HTTP {resp.status_code}", resp.status_code)
             if attempt < retries:
                 await asyncio.sleep(1.5 ** (attempt + 1) + random.random())
         assert last_error is not None
@@ -130,7 +137,7 @@ class HttpClient:
         if resp.status_code in BAN_STATUSES:
             return True
         content_type = resp.headers.get("content-type", "")
-        return "html" in content_type and len(resp.content) < 20_000 and bool(BAN_MARKERS.search(resp.text))
+        return "html" in content_type and looks_like_ban_page(resp.text)
 
     async def _ban(self, proxy: str) -> None:
         log.warning("proxy banned for %ss: %s", PROXY_BAN_SECONDS, _redact(proxy))
@@ -140,6 +147,11 @@ class HttpClient:
                 await self._on_ban(proxy)
             except Exception:
                 log.exception("failed to record proxy ban")
+
+
+def looks_like_ban_page(text: str) -> bool:
+    """A small page naming a captcha / WAF denial (real pages are far bigger than 20 kB)."""
+    return len(text) < 20_000 and bool(BAN_MARKERS.search(text))
 
 
 def _redact(url: str) -> str:

@@ -215,8 +215,9 @@ async def test_discovery_alerts_new_releases_matching_keywords(pool, tmp_path):
     rows = await pool.fetch(
         "SELECT r.channel_id, o.payload FROM alert_outbox o JOIN routes r ON r.id = o.route_id ORDER BY 1, 2")
     got = sorted((r["channel_id"], r["payload"]["sku"]) for r in rows)
-    # keyword channel: only the 30th bundle. catch-all channel: every new sealed product, never singles.
-    assert got == [(1, "bb30"), (2, "bb30"), (2, "sleeves")]
+    # keyword channel: only the 30th bundle. catch-all channel: every new sealed product, never
+    # singles or accessories (the ETB-sized sleeves are an accessory despite "Elite Trainer Box").
+    assert got == [(1, "bb30"), (2, "bb30")]
     assert rows[0]["payload"]["atc_url"] == "https://fake/cart/bb30:1"
 
     tracked = {r["key"] for r in await pool.fetch("SELECT key FROM jobs WHERE auto")}
@@ -226,3 +227,52 @@ async def test_discovery_alerts_new_releases_matching_keywords(pool, tmp_path):
     ctx.routes.invalidate()
     await run_due(worker, ctx)
     assert not await pool.fetchval("SELECT count(*) FROM jobs WHERE auto")
+
+
+# --- store stock carried by listings (Kmart's islands) ----------------------------------
+
+
+@register
+class FakeIslandRetailer(RetailerAdapter):
+    adapter_name = "_fake_islands"
+    supports_discovery = True
+    stock_in_listings = True
+    north = Level.OUT
+
+    async def discover(self):
+        return [Product(self.retailer_id, "pb", "Pokemon Pitch Black Booster Bundle", "https://fake/pb",
+                        price_cents=6200, online=Stock(Level.OUT), note="In-store only",
+                        stores={"NI": Stock(self.north), "SI": Stock(Level.OUT)})]
+
+    async def search(self, query):
+        return []
+
+    async def fetch_products(self, skus):
+        return []
+
+    async def list_stores(self):
+        return [Store(self.retailer_id, "NI", "North Island"), Store(self.retailer_id, "SI", "South Island")]
+
+    def store_label(self, store_id):
+        return {"NI": "North Island", "SI": "South Island"}[store_id]
+
+
+async def test_listing_store_stock_alerts_island_channel(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "isl", "_fake_islands", "Fake Kmart")
+    await queries.add_route(pool, 20, "https://discord.test/ni", "isl", "NI")
+    await queries.add_route(pool, 21, "https://discord.test/si", "isl", "SI")
+    worker = Worker(ctx)
+    await reconcile(ctx)
+    assert {r["key"] for r in await pool.fetch("SELECT key FROM jobs")} == {"stores:isl", "discover:isl"}
+    await run_due(worker, ctx)  # baseline + island store sync
+    assert await pool.fetchval("SELECT count(*) FROM stores WHERE retailer_id = 'isl'") == 2
+
+    FakeIslandRetailer.north = Level.IN
+    await run_due(worker, ctx)
+    rows = await pool.fetch(
+        "SELECT r.channel_id, o.payload FROM alert_outbox o JOIN routes r ON r.id = o.route_id")
+    assert [(r["channel_id"], r["payload"]["type"], r["payload"]["store_name"]) for r in rows] == [
+        (20, "restock", "North Island")]
+    assert rows[0]["payload"]["extra"]["note"] == "In-store only"
+    assert not await pool.fetchval("SELECT count(*) FROM jobs WHERE kind = 'watch_sku'"), "no per-product calls"

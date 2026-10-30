@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 ONLINE = ""  # store_id used for a product's online (non-store) state
+ANY_STORE = "*"  # route store_id: every physical store, no online alerts (#kmart-instore)
 
 
 class Level(StrEnum):
@@ -43,6 +44,9 @@ class Product:
     franchise: str | None = None
     ptype: str | None = None
     atc_url: str | None = None  # direct add-to-cart link, when the retailer supports one
+    # Store-level stock that comes with the listing itself (Kmart's per-island flags), store_id -> stock.
+    stores: dict[str, Stock] | None = None
+    note: str | None = None  # shown on alerts, e.g. "In-store only"
 
 
 @dataclass(frozen=True)

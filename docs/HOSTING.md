@@ -50,7 +50,9 @@ The same `docker-compose.local.yml` works unchanged. To make it a dependable app
    - Turn off *USB selective suspend*.
    - Set Windows Update active hours so restarts happen overnight.
 3. **Auto sign-in after reboots**, using `netplwiz` or Sysinternals Autologon, so Docker Desktop starts after Windows Update restarts the machine.
-4. **GitHub self-hosted runner:** install it as a Windows service on the laptop and give it the label `tcgpings`. [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) then rebuilds and restarts the stack on every push to `main`, but only after the tests pass.
+4. **GitHub self-hosted runner:** the deploy machine is **GGPC**. It runs one runner per repo, because a runner on a personal account serves a single repo: `ggpc` for Clipping, and `ggpc-tcgpings` (label `tcgpings`, in `C:\actions-runner-tcgpings`) for this one. Both use GGPC's one Docker Desktop. `ggpc-tcgpings` starts at sign-in from the scheduled task *TCGPings GitHub Runner*, under your Windows account. [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) then rebuilds and restarts the stack on every push to `main`, but only after the tests pass.
+   - `.env` and `data/` live in `C:\tcgpings` (repository variable `TCGPINGS_HOME`), outside the checkout. The database stays in the `tcgpings-local_pgdata` Docker volume.
+   - The `SCRAPFLY_API_KEY` and `ZYTE_API_KEY` repository secrets are copied into that `.env` on each deploy. A secret that isn't set leaves the value in `.env` alone.
 5. Gaming laptops run hot at 24/7 idle, so put it on a stand. Battery-charge limiting in the vendor app (e.g. 60–80%) extends battery life.
 
 A home connection is the **best place to run this**. NZ residential IPs are trusted far more by Akamai, Cloudflare and DataDome than cloud IPs (see §4).
@@ -95,7 +97,7 @@ The store counts marked ≈ are estimates and need confirming during each retail
 | **The Warehouse** | **76** (confirmed) | yes, per store, 15 regions | Salesforce Commerce Cloud + Cloudflare | 200 | A for listings and store list. Store stock needs a per-product token from the product page, and the **Pokémon product page is behind a Cloudflare Turnstile challenge** |
 | **Noel Leeming** | ≈70 | likely | Salesforce Commerce Cloud + Cloudflare (same group as Warehouse) | 200 | A: shares most of The Warehouse's code |
 | **Warehouse Stationery** | ≈60 | likely | Cloudflare **challenge** | 403 | C or E |
-| **Kmart NZ** | ≈27 | likely (click & collect API) | Next.js + Constructor.io + **Akamai** | 200 (first hit) | A via its stock API if not Akamai-gated, otherwise C/E |
+| **Kmart NZ** | ≈27 | likely (click & collect API) | Next.js + Constructor.io + **Akamai** | 200 (first hit) | **Live via Constructor.io** (listings, price, online + per-island stock). Per-store stock: its GraphQL gateway, behind Akamai (recon pending) |
 | **JB Hi-Fi NZ** | ≈15 | **yes**: in-stock store IDs embedded in the product page | Shopify + Algolia + Cloudflare | 200 (3/3) | **A, plain HTTP, confirmed.** One request per product gives every store's stock |
 | **Toyworld** | ≈30 | maybe | Shopify + Cloudflare | 200 | A: probably works with the generic Shopify adapter as is |
 | **Mighty Ape** | online only | no | **DataDome** | 403 | C or E. Online stock only |
@@ -110,8 +112,8 @@ The store counts marked ≈ are estimates and need confirming during each retail
 2. Farmers via Constructor.io: new listings and online stock, confirmed.
 3. The Warehouse and Noel Leeming: listings and online stock now; per-store only for products whose pages aren't challenged.
 4. Toyworld: Shopify, near-free.
-5. Kmart, then Woolworths.
-6. Farmers per-store stock once a browser/proxy approach is proven.
+5. ~~Kmart~~ (live via Constructor.io), then Woolworths.
+6. ~~Farmers per-store stock~~ (built: the fetch chain, §6).
 7. Mighty Ape and Warehouse Stationery last.
 
 ## 6. Farmers: status and next steps
@@ -126,10 +128,24 @@ What was tried on 2026-10-29, from the home IP:
 | Patchright + Google Chrome, headed | home page OK and `_abck` validated, but the stock call returned 403. A later cold visit to a product page was denied |
 | Same, inside Docker (Linux Chrome + Xvfb) | home page OK, search call blocked |
 | The app's normal browser (aged cookie) | **every call OK** |
+| Retest after a few hours' cool-down (Docker, persistent profile, 10 req/min) | product page (`ViewProduct-Start`) still **blocked** |
 
-Akamai probably scores *new* automated sessions from this IP more harshly after the day's testing. Next steps, cheapest first:
-1. **Let it cool for 24–48 h**, then trial again with the persistent profile in `data/browser/farmers`, which keeps its cookies, at 10 requests/min. Start with a warm-up of several page views.
-2. **Seed trust by hand:** open the bot's own Chrome profile once (via noVNC into the container), browse Farmers normally for a minute, and let the cookie age. This is the setup that consistently worked.
-3. **Route only the Farmers browser through an NZ residential proxy** (D). That's a fresh IP reputation, and cheap because the traffic is small.
-4. **Fall back to an unblocker API (E) or a cookie service (F)** for the stock call only.
-5. **Long term: ask Farmers** (you plan to).
+Akamai probably scores *new* automated sessions from this IP more harshly after the day's testing.
+
+### The fetch chain (built)
+
+Price and store stock go through `tcgpings/net/chain.py`, which tries each route in turn and fixes itself:
+
+| Route | Cost | When the site blocks it |
+|---|---|---|
+| 1. Our Chrome (persistent profile) | free | rests **24 h**, then is tried again on its own |
+| 2. ScrapFly (`SCRAPFLY_API_KEY`) | credits; ~30+ per Akamai request (US$30 = 200k credits on Discovery) | rests 1 h |
+| 3. Zyte API (`ZYTE_API_KEY`) | ~US$1.27 per 1,000 (hardest tier, plain HTTP), pay as you go | rests 1 h |
+
+- Breakers are kept in Postgres (`fetch_breakers`), so every node shares them and they survive restarts. A bad key or empty account (401/402) rests that service for 24 h; three network errors in a row rest a route for 30 min. A retailer's own 404 is an answer, not a failure.
+- **Spend cap:** `UNBLOCKER_MONTHLY_BUDGET_USD` (default 20). At 80% Farmers checks only its priority regions; at 100% the paid routes stop until next month and the free ones keep going. ScrapFly reports each request's credit cost; Zyte's is estimated from `ZYTE_USD_PER_REQUEST`. Set a matching limit in each provider's dashboard as a second backstop.
+- **Staff pings only when it can't fix itself:** budget at 80% or used up, or every route for a retailer blocked for more than a day. `/status` shows each route's state and this month's spend.
+- **Volume** at once a day: 30 products × 13 regions ≈ 12k requests/month (all regions), or ≈ 1k (Auckland only).
+- **Testing a key live:** `python -m tcgpings probe farmers stock 7044417 --store albany --set fetch='["scrapfly"]'`.
+
+Still worth doing: let the home IP cool off (the Chrome route then works for free), an NZ residential proxy for Chrome (`net/browser.py` doesn't take one yet), and asking Farmers directly (you plan to).

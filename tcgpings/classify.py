@@ -20,6 +20,9 @@ FRANCHISE_NAMES = {
     "yugioh": "Yu-Gi-Oh!",
 }
 
+# Sleeves, binders, deck boxes...: never "sealed product", even when a deck/box word also matches.
+ACCESSORY = re.compile(r"sleeves|binder|deck\s*box|playmat|portfolio|toploader|pocket\s*pages|protector", re.I)
+
 # Checked in order: more specific types first.
 PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
     ("booster_bundle", re.compile(r"booster\s*bundle", re.I)),
@@ -31,12 +34,14 @@ PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
     ("blister", re.compile(r"blister|checklane|\b\d\s*-?\s*pack\b", re.I)),
     ("starter_deck", re.compile(r"starter|structure\s*deck|theme\s*deck|battle\s*deck|commander\s*deck|\bdeck\b", re.I)),
     ("booster_pack", re.compile(r"booster|\bpacks?\b|sleeved", re.I)),
-    ("accessory", re.compile(r"sleeves|binder|deck\s*box|playmat|portfolio|toploader", re.I)),
+    ("accessory", ACCESSORY),
 ]
 
 # Franchise merchandise that isn't sealed card product.
 NON_CARD = re.compile(
-    r"plush|figure|acrylic|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|puzzle|"
+    r"plush|figure|acrylic|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|\bmega\s+pok|puzzle|"
+    r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*n\W*go|surprise\s*attack|battle\s*game|"
+    r"bandolier|monopoly|guess\s*who|"
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b",
     re.I,
@@ -77,7 +82,8 @@ def is_sealed_product(title: str, franchise: str | None = None, ptype: str | Non
     with no recognisable type still count ("Disney Lorcana Azurite Sea" is a set release).
     """
     ptype = ptype or ptype_of(title)
-    return is_card_product(title, franchise) and ptype != "accessory" and not SINGLE_CARD.search(title)
+    return (is_card_product(title, franchise) and ptype != "accessory" and not ACCESSORY.search(title)
+            and not SINGLE_CARD.search(title))
 
 
 def matches_query(text: str, query: str) -> bool:

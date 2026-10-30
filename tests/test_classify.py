@@ -58,6 +58,18 @@ def test_matches_query_is_accent_and_case_insensitive():
     ('"A Case for K9" [JUSH-EN040] Super Rare', "yugioh", False),
     ("Monkey.D.Luffy OP09-118 Secret Rare", "one_piece", False),
     ("Cards FIFA 365 Adrenalyn XL 2026 Soccer Tin, Assorted", None, False),     # not one of our games
+    # Toyworld's Pokémon collection is mostly toys
+    ("Disney Lorcana Series 8 Reign of Jafar Booster Sleeve", None, True),
+    ("Disney Lorcana Series 5 Shimmering Skies Deck Box - Aladdin", None, False),  # accessory, not a deck
+    ("4D Build Pokémon Model Kit - Eevee", None, False),
+    ("Pokemon Clip N Go Chimchar & Repeat Ball", None, False),
+    ("Pokemon Surprise Attack Poke Ball Battle Game Larvitar & Scorbunny", None, False),
+    ("MEGA Pokémon - Vulpix Evolution Set", None, False),
+    ("Pokemon TCG Mega Evolution Elite Trainer Box", None, True),
+    ("Pokemon TCG Poke Ball Tin", None, True),
+    # Kmart
+    ("Pokemon TCG: Ultra Pro 9-Pocket Pages", None, False),
+    ("Pokemon Trading Card Game: Mega Evolution Pitch Black Booster Bundle", None, True),
 ])
 def test_is_sealed_product(title, franchise, expected):
     from tcgpings.classify import is_sealed_product
