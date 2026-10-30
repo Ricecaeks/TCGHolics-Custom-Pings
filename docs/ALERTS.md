@@ -22,7 +22,7 @@ Move, rename or re-sort the channels and categories however you like: routes fol
 
 ## One channel for everything (beta)
 
-To see every alert in one place without the bot, create a webhook in that channel and set `ALERT_WEBHOOK_URL` (a GitHub repository secret, copied to the deploy machine's `.env`). `DRY_RUN` must be `false` for alerts to actually post. Alerts use the webhook's own name and picture; [`assets/logo.png`](../assets/logo.png) is the logo.
+To see every alert in one place without the bot, create a webhook in that channel and set `ALERT_WEBHOOK_URL` (from the `TEST_CHANNEL_WEBHOOK` repository secret, copied to the deploy machine's `.env`). `DRY_RUN` must be `false` for alerts to actually post. Alerts use the webhook's own name and picture; [`assets/logo.png`](../assets/logo.png) is the logo.
 
 ## How alerts work
 
