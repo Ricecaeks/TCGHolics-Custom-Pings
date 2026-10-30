@@ -20,6 +20,10 @@ Each channel gets a webhook and a route saved in the database. Retailers without
 
 Move, rename or re-sort the channels and categories however you like: routes follow the channel, not its name or place. Re-running `/setup` only fills gaps (a deleted channel is recreated, existing ones are left alone). The preview shows how many channels the server would have against Discord's 500 limit. Add keywords per channel afterwards with `/route keywords`.
 
+## One channel for everything (beta)
+
+To see every alert in one place without the bot, create a webhook in that channel and set `ALERT_WEBHOOK_URL` (a GitHub repository secret, copied to the deploy machine's `.env`). `DRY_RUN` must be `false` for alerts to actually post. Alerts use the webhook's own name and picture; [`assets/logo.png`](../assets/logo.png) is the logo.
+
 ## How alerts work
 
 1. **Discovery runs on its own.** Every enabled retailer's TCG range is scanned every 2–3 minutes for new listings, stock changes and price changes. You don't need to "watch" anything for this.

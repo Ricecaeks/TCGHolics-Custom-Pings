@@ -70,6 +70,5 @@ async def deliver(
     await webhook.send(
         content=content,
         embed=embed,
-        username=(event.extra.get("retailer_name") or "TCGHolics Pings")[:80],
         allowed_mentions=discord.AllowedMentions(roles=True, users=False, everyone=False),
     )

@@ -383,6 +383,13 @@ async def product_states(db: DB, retailer_id: str, sku: str) -> list[asyncpg.Rec
 # --- routes ----------------------------------------------------------------------------
 
 
+async def set_catch_all_route(db: DB, webhook_url: str) -> None:
+    """Keep one every-alert route on ALERT_WEBHOOK_URL. There's no bot to tell us its channel, so its id is -1."""
+    result = await db.execute("UPDATE routes SET webhook_url = $1 WHERE channel_id = -1", webhook_url)
+    if result.endswith(" 0"):
+        await add_route(db, -1, webhook_url)
+
+
 async def list_routes(db: DB) -> list[asyncpg.Record]:
     return await db.fetch("SELECT * FROM routes ORDER BY id")
 
