@@ -87,6 +87,8 @@ async def run(settings: Settings) -> None:
     try:
         await migrate(ctx.pool)
         await seed_retailers(ctx)
+        if settings.alert_webhook_url:
+            await queries.set_catch_all_route(ctx.pool, settings.alert_webhook_url)
         await queries.register_node_start(ctx.pool, ctx.node_name, __version__)
         ctx.egress_ip = settings.egress_ip or await lookup_egress_ip(settings.egress_lookup_url)
         await beat(ctx)

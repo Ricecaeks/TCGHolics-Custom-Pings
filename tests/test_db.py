@@ -127,6 +127,15 @@ async def test_instore_channel_gets_one_alert_listing_the_stores(pool):
     assert [s["name"] for s in rows[1]["payload"]["stores"]] == ["Albany", "Northwest"]
 
 
+async def test_catch_all_route_is_kept_on_one_webhook(pool):
+    await queries.set_catch_all_route(pool, "https://discord.test/one")
+    await queries.set_catch_all_route(pool, "https://discord.test/one")
+    await queries.set_catch_all_route(pool, "https://discord.test/two")
+    [route] = await queries.list_routes(pool)
+    assert route["webhook_url"] == "https://discord.test/two"
+    assert route["retailer_id"] is None and route["store_id"] is None
+
+
 async def test_fetch_breakers_and_spend(pool):
     await seed(pool)
     assert not await queries.breaker_open(pool, "farmers", "browser")

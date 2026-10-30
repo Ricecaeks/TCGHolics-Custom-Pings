@@ -36,14 +36,15 @@ jobs:
           test -n "$TCGPINGS_HOME" || { echo "Set the TCGPINGS_HOME repository variable"; exit 1; }
           test -f "$TCGPINGS_ENV" || { echo "Missing $TCGPINGS_ENV"; exit 1; }
           mkdir -p "$TCGPINGS_DATA"
-      - name: Copy unblocker keys into .env
+      - name: Copy secrets into .env
         env:
           SCRAPFLY_API_KEY: ${{ secrets.SCRAPFLY_API_KEY }}
           ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
         run: |
           # A secret that isn't set leaves any value already in .env alone.
           [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
-          for name in SCRAPFLY_API_KEY ZYTE_API_KEY; do
+          for name in SCRAPFLY_API_KEY ZYTE_API_KEY ALERT_WEBHOOK_URL; do
             value="${!name}"
             [ -n "$value" ] || continue
             sed -i "/^$name=/d" "$TCGPINGS_ENV"

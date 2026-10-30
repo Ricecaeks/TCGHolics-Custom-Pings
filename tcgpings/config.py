@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     node_stale_seconds: int = 60
     leader_lock_key: int = 72_4242_01
 
+    # Sends every alert to this one webhook (a catch-all route), e.g. a beta channel. Works without the bot.
+    alert_webhook_url: str = ""
     # The leader creates channels and routes for newly enabled retailers by itself (same as /setup).
     auto_setup: bool = True
 
