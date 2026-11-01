@@ -220,15 +220,9 @@ class FarmersAdapter(RetailerAdapter):
 
     async def fetch_products(self, skus: list[str]) -> list[Product]:
         products = []
-        missing = set()
-        for sku in skus:  # Constructor finds most products by their SKU
-            found = [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
-                     if p.sku == sku]
-            products += found
-            if not found:
-                missing.add(sku)
-        if missing:  # Search misses some (the 30th Booster Bundle, 7064593); the category listing has them
-            products += [p for p in await self.discover() if p.sku in missing]
+        for sku in skus:  # Constructor finds a listed product by its SKU
+            products += [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
+                         if p.sku == sku]
         return products
 
     async def refresh_details(self, product: Product) -> None:

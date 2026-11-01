@@ -17,7 +17,7 @@ from tcgpings.db import queries
 from tcgpings.engine.pipeline import classify_product
 from tcgpings.engine.planner import sku_job_key
 from tcgpings.engine.router import keyword_routes_match
-from tcgpings.models import Store
+from tcgpings.models import Product, Store
 from tcgpings.net.http import Blocked
 
 log = logging.getLogger(__name__)
@@ -141,10 +141,16 @@ class Worker:
         retailer = await self.ctx.adapters.retailer(job["retailer_id"])
         adapter = await self.ctx.adapters.get(job["retailer_id"])
         products = await adapter.fetch_products([payload["sku"]])
-        if not products:
-            log.warning("%s: %s not found, so it wasn't checked", job["retailer_id"], payload["sku"])
-            return
-        product = products[0]
+        if products:
+            product = products[0]
+        else:
+            # Sold-out products can vanish from a retailer's search while its stores still report them.
+            row = await queries.get_product(self.ctx.pool, job["retailer_id"], payload["sku"])
+            if not row or not adapter.store_stock_enabled:
+                log.warning("%s: %s not found, so it wasn't checked", job["retailer_id"], payload["sku"])
+                return
+            product = Product(row["retailer_id"], row["sku"], row["title"], row["url"], image=row["image"],
+                              franchise=row["franchise"], ptype=row["ptype"], atc_url=row["atc_url"])
         stock, names = None, None
         if adapter.store_stock_enabled and await self._store_check_due(adapter, product.sku):
             wanted = payload.get("store_ids")
