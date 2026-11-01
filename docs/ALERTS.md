@@ -39,6 +39,19 @@ Staff choose the channel by running `/route pings` in it (e.g. `#custom-pings`).
 
 For retailers with store stock, a keyword can only match a store when that product is being checked per store. JB Hi-Fi, Toyworld and Kmart check every sealed product. Farmers only checks products matching a watch or keyword route, because each check costs money.
 
+## Hot sets
+
+The bot reads public news feeds every 3 hours (PokéBeach, plus Google News for each game) and posts a card to the staff channel (`LOG_CHANNEL_ID`) for each release it hasn't seen, up to 5 at a time. **Approve** lets you edit the keyword, then searches every retailer for it and speeds up its store checks for 14 days. **Ignore** drops it.
+
+```
+/hot add keyword: delta reign days: 14
+/hot list
+/hot remove keyword: delta reign
+```
+
+- Faster checks are free ones only: JB Hi-Fi every 2 minutes and Toyworld every 5. Farmers stays daily because each check costs money, and Kmart isn't sped up because Akamai challenges it.
+- The bot doesn't read pokemon.com directly, because it answers automated requests with a bot wall.
+
 ## Member sightings
 
 Website checks can't see every store, and stock can reach the shelf before a website knows. `/spotted` lets members report what they've seen:

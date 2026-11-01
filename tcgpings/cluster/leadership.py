@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tcgpings.context import Context
-from tcgpings.db import queries
+from tcgpings.db import queries
+from tcgpings.retailers import REGISTRY
+from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.engine.planner import plan_jobs
 
 log = logging.getLogger(__name__)
@@ -20,7 +22,8 @@ RECONCILE_SECONDS = 30
 HEALTH_SECONDS = 60
 MAINTENANCE_SECONDS = 24 * 3600
 ADAPTER_STALE_SECONDS = 30 * 60
-AUTO_SETUP_SECONDS = 10 * 60
+AUTO_SETUP_SECONDS = 10 * 60
+NEWS_SCAN_SECONDS = 3 * 3600
 ROUTES_DOWN_SECONDS = 24 * 3600
 
 
@@ -34,6 +37,8 @@ async def lead(ctx: Context) -> None:
         tasks.append(bot.start(ctx.settings.discord_token))
         if ctx.settings.auto_setup and ctx.settings.guild_id:
             tasks.append(auto_setup_loop(ctx, bot))
+        if ctx.settings.log_channel_id:
+            tasks.append(news_loop(ctx, bot))
     else:
         log.warning("DISCORD_TOKEN not set: slash commands are disabled (alerts still send via webhooks)")
     tasks.append(health_loop(ctx, bot))
@@ -57,7 +62,36 @@ async def reconcile(ctx: Context) -> int:
     )
     async with ctx.pool.acquire() as conn:
         await queries.reconcile_jobs(conn, desired)
+    await apply_hot_intervals(ctx)
     return len(desired)
+
+
+async def apply_hot_intervals(ctx: Context) -> None:
+    """Products in a hot set get their retailer's faster checks, and go back to normal when it expires."""
+    hot = [KeywordFilter.parse(w["query"]) for w in await queries.list_hot_watches(ctx.pool)]
+    changes = []
+    for job in await queries.store_check_jobs(ctx.pool):
+        cls = REGISTRY.get(job["adapter"])
+        if cls is None or cls.hot_sku_interval is None:
+            continue
+        interval = cls.hot_sku_interval if any(f.matches(job["title"]) for f in hot) else cls.default_sku_interval
+        if interval != job["interval_seconds"]:
+            changes.append((job["id"], interval))
+    if changes:
+        await queries.set_job_intervals(ctx.pool, changes)
+
+
+async def news_loop(ctx: Context, bot) -> None:
+    """Suggest new releases for staff to approve."""
+    from tcgpings.discord.hot import scan_news
+
+    await bot.wait_until_ready()
+    while True:
+        try:
+            await scan_news(ctx, bot)
+        except Exception:
+            log.exception("news scan failed")
+        await asyncio.sleep(NEWS_SCAN_SECONDS)
 
 
 async def reconcile_loop(ctx: Context) -> None:

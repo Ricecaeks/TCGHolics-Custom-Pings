@@ -638,7 +638,9 @@ async def test_alert_cmd(interaction: discord.Interaction) -> None:
 
 
 def register(tree: app_commands.CommandTree) -> None:
-    for group in (WatchGroup(), RouteGroup(), RetailerGroup(), PingGroup()):
+    from tcgpings.discord.hot import HotGroup
+
+    for group in (WatchGroup(), RouteGroup(), RetailerGroup(), PingGroup(), HotGroup()):
         tree.add_command(group)
     for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd, spotted_cmd):
         tree.add_command(cmd)

@@ -45,10 +45,11 @@ jobs:
           GUILD_ID: ${{ secrets.GUILD_ID }}
           STAFF_ROLE_ID: ${{ secrets.STAFF_ROLE_ID }}
           MEMBERS_ROLE_ID: ${{ secrets.MEMBERS_ROLE_ID }}
+          LOG_CHANNEL_ID: ${{ secrets.LOG_CHANNEL_ID }}
         run: |
           # A secret that isn't set leaves any value already in .env alone.
           [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
-          for name in SCRAPFLY_API_KEY ZYTE_API_KEY ALERT_WEBHOOK_URL DISCORD_TOKEN GUILD_ID STAFF_ROLE_ID MEMBERS_ROLE_ID; do
+          for name in SCRAPFLY_API_KEY ZYTE_API_KEY ALERT_WEBHOOK_URL DISCORD_TOKEN GUILD_ID STAFF_ROLE_ID MEMBERS_ROLE_ID LOG_CHANNEL_ID; do
             value="${!name}"
             [ -n "$value" ] || continue
             sed -i "/^$name=/d" "$TCGPINGS_ENV"

@@ -427,6 +427,87 @@ async def add_member_ping(db: DB, user_id: int, keywords: str) -> int | None:
     )
 
 
+async def keyword_known(db: DB, keyword: str) -> bool:
+    """Is this keyword already being searched, or already suggested to staff?"""
+    return await db.fetchval(
+        """
+        SELECT EXISTS (SELECT 1 FROM watches WHERE lower(query) = lower($1))
+            OR EXISTS (SELECT 1 FROM hot_candidates WHERE lower(keyword) = lower($1) AND status <> 'duplicate')
+        """,
+        keyword,
+    )
+
+
+async def add_hot_candidate(db: DB, source: str, title: str, url: str, keyword: str, status: str) -> bool:
+    result = await db.execute(
+        """
+        INSERT INTO hot_candidates (source, title, url, keyword, status) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (source, title) DO NOTHING
+        """,
+        source, title, url, keyword, status,
+    )
+    return result.endswith(" 1")
+
+
+async def unposted_candidates(db: DB, limit: int) -> list[asyncpg.Record]:
+    return await db.fetch(
+        "SELECT * FROM hot_candidates WHERE status = 'pending' AND message_id IS NULL ORDER BY id LIMIT $1", limit
+    )
+
+
+async def get_candidate(db: DB, candidate_id: int) -> asyncpg.Record | None:
+    return await db.fetchrow("SELECT * FROM hot_candidates WHERE id = $1", candidate_id)
+
+
+async def set_candidate_message(db: DB, candidate_id: int, message_id: int) -> None:
+    await db.execute("UPDATE hot_candidates SET message_id = $2 WHERE id = $1", candidate_id, message_id)
+
+
+async def set_candidate_status(db: DB, candidate_id: int, status: str) -> None:
+    await db.execute("UPDATE hot_candidates SET status = $2 WHERE id = $1", candidate_id, status)
+
+
+async def mark_hot(db: DB, keyword: str, days: int, created_by: int | None = None) -> None:
+    """Search for this keyword if it isn't already, and treat it as hot for `days`."""
+    until = "now() + make_interval(days => $2)"
+    result = await db.execute(
+        f"UPDATE watches SET hot_until = {until} WHERE kind = 'keyword' AND lower(query) = lower($1) AND retailer_id IS NULL",
+        keyword, days,
+    )
+    if result.endswith(" 0"):
+        await db.execute(
+            f"INSERT INTO watches (kind, query, created_by, hot_until) VALUES ('keyword', $1, $3, {until})",
+            keyword, days, created_by,
+        )
+
+
+async def unmark_hot(db: DB, keyword: str) -> bool:
+    result = await db.execute(
+        "UPDATE watches SET hot_until = NULL WHERE lower(query) = lower($1) AND hot_until > now()", keyword
+    )
+    return not result.endswith(" 0")
+
+
+async def list_hot_watches(db: DB) -> list[asyncpg.Record]:
+    return await db.fetch("SELECT * FROM watches WHERE enabled AND hot_until > now() ORDER BY hot_until, query")
+
+
+async def store_check_jobs(db: DB) -> list[asyncpg.Record]:
+    return await db.fetch(
+        """
+        SELECT j.id, j.interval_seconds, r.adapter, p.title
+        FROM jobs j
+        JOIN retailers r ON r.id = j.retailer_id
+        JOIN products p ON p.retailer_id = j.retailer_id AND p.sku = j.payload->>'sku'
+        WHERE j.kind = 'watch_sku' AND j.auto
+        """
+    )
+
+
+async def set_job_intervals(db: DB, changes: list[tuple[int, int]]) -> None:
+    await db.executemany("UPDATE jobs SET interval_seconds = $2 WHERE id = $1", changes)
+
+
 async def list_member_pings(db: DB, user_id: int | None = None) -> list[asyncpg.Record]:
     return await db.fetch(
         "SELECT * FROM member_pings WHERE $1::bigint IS NULL OR user_id = $1 ORDER BY id", user_id

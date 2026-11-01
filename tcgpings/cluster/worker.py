@@ -128,13 +128,13 @@ class Worker:
         ids = list(names) if wanted is None else [i for i in wanted if i in names]
         return ids, names
 
-    async def _store_check_due(self, adapter: Any, sku: str) -> bool:
+    async def _store_check_due(self, adapter: Any, sku: str, job_interval: int) -> bool:
         if not adapter.store_stock_interval and not adapter.store_stock_daily_at:
             return True
         age = await queries.seconds_since_store_check(self.ctx.pool, adapter.retailer_id, sku)
         if adapter.store_stock_daily_at:
             return daily_check_due(age, datetime.now(NZ), adapter.store_stock_daily_at, sku)
-        return age is None or age >= adapter.store_stock_interval
+        return age is None or age >= min(adapter.store_stock_interval, job_interval)  # hot jobs run sooner
 
     async def _watch_sku(self, job: Any) -> None:
         payload = job["payload"]
@@ -152,7 +152,7 @@ class Worker:
             product = Product(row["retailer_id"], row["sku"], row["title"], row["url"], image=row["image"],
                               franchise=row["franchise"], ptype=row["ptype"], atc_url=row["atc_url"])
         stock, names = None, None
-        if adapter.store_stock_enabled and await self._store_check_due(adapter, product.sku):
+        if adapter.store_stock_enabled and await self._store_check_due(adapter, product.sku, job["interval_seconds"]):
             wanted = payload.get("store_ids")
             ids, names = await self._store_ids(job["retailer_id"], wanted)
             if ids or (wanted is None and adapter.store_stock_discovers_stores):
