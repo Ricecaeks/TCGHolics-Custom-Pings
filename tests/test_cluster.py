@@ -301,3 +301,29 @@ async def test_store_checks_continue_for_a_product_the_retailer_stopped_listing(
     rows = await pool.fetch("SELECT sku, store_id FROM product_state ORDER BY store_id")
     assert [(r["sku"], r["store_id"]) for r in rows] == [("bundle", "albany"), ("bundle", "westgate")]
     assert ctx.stats.jobs_failed == 0
+
+
+@register
+class FakeTrackAllRetailer(FakeDiscoveryRetailer):
+    adapter_name = "_fake_track_all"
+    supports_store_stock = True
+    track_all_discovered = True
+
+    async def list_stores(self):
+        return [Store(self.retailer_id, "albany", "Albany")]
+
+    async def store_stock(self, sku, store_ids):
+        return {"albany": Stock(Level.IN, 4)}
+
+
+async def test_retailer_can_track_every_sealed_product_without_keyword_routes(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "fake", "_fake_track_all", "Fake Toyworld")
+    FakeTrackAllRetailer.catalogue = [("bundle", "Pokémon 30th Booster Bundle")]
+    worker = Worker(ctx)
+    await reconcile(ctx)
+    await run_due(worker, ctx)  # store sync + discovery, which adds the store-level job
+    await run_due(worker, ctx)  # that job stays and runs
+    assert await pool.fetchval("SELECT count(*) FROM jobs WHERE key = 'sku:fake:bundle'") == 1
+    row = await pool.fetchrow("SELECT level, qty FROM product_state WHERE sku = 'bundle' AND store_id = 'albany'")
+    assert (row["level"], row["qty"]) == ("in", 4)

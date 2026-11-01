@@ -188,7 +188,9 @@ class Worker:
                 continue
             await self.ctx.pipeline.record(retailer, product, *_listed_stock(adapter, product), announce_new=announce)
             kept += 1
-            if adapter.store_stock_enabled and keyword_routes_match(routes, adapter.retailer_id, product.title):
+            if adapter.store_stock_enabled and (
+                adapter.track_all_discovered or keyword_routes_match(routes, adapter.retailer_id, product.title)
+            ):
                 wanted.append(product.sku)
         if adapter.store_stock_enabled:
             await self._track_discovered(adapter, wanted, routes)
@@ -199,7 +201,8 @@ class Worker:
         """Keep store-level jobs for discovered products that match a keyword route; drop ones that no longer do."""
         existing = await queries.discovery_tracked_jobs(self.ctx.pool, adapter.retailer_id)
         stale = [r["id"] for r in existing
-                 if not r["title"] or not keyword_routes_match(routes, adapter.retailer_id, r["title"])]
+                 if not adapter.track_all_discovered
+                 and (not r["title"] or not keyword_routes_match(routes, adapter.retailer_id, r["title"]))]
         await queries.delete_jobs(self.ctx.pool, stale)
         room = self.ctx.settings.max_tracked_per_retailer - (len(existing) - len(stale))
         tracked = {r["sku"] for r in existing}

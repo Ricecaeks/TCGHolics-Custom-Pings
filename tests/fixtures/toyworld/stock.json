@@ -1,0 +1,39 @@
+{
+ "response": [
+  {
+   "code": "1065",
+   "store_name": "Toyworld Palmerston North",
+   "stock": "1",
+   "recordUpdatedAt": "2026-11-01 05:27:30",
+   "upi": "4050368984227"
+  },
+  {
+   "code": "1073",
+   "store_name": "Toyworld Lower Hutt",
+   "stock": "1",
+   "recordUpdatedAt": "2026-11-01 05:27:30",
+   "upi": "4050368984227"
+  },
+  {
+   "code": "1120",
+   "store_name": "Toyworld Waihi",
+   "stock": "0",
+   "recordUpdatedAt": "2026-11-01 05:27:30",
+   "upi": "4050368984227"
+  },
+  {
+   "code": "1119",
+   "store_name": "Toyworld Te Awamutu",
+   "stock": "0",
+   "recordUpdatedAt": "2026-11-01 05:27:30",
+   "upi": null
+  },
+  {
+   "code": "NPL1",
+   "store_name": "Toyworld New Plymouth",
+   "stock": "0",
+   "recordUpdatedAt": "2026-11-01 05:27:30",
+   "upi": null
+  }
+ ]
+}

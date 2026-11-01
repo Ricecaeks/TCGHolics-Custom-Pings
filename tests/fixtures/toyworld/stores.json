@@ -1,0 +1,36 @@
+{
+ "response": {
+  "stores_list": [
+   {
+    "code": "1120",
+    "name": "Toyworld Waihi",
+    "region_name": "Waikato",
+    "region_code": "WKO"
+   },
+   {
+    "code": "1119",
+    "name": "Toyworld Te Awamutu",
+    "region_name": "Waikato",
+    "region_code": "WKO"
+   },
+   {
+    "code": "NPL1",
+    "name": "Toyworld New Plymouth",
+    "region_name": "Taranaki",
+    "region_code": "TKI"
+   },
+   {
+    "code": "1058",
+    "name": "Toyworld Wellington",
+    "region_name": "Wellington",
+    "region_code": "WGN"
+   },
+   {
+    "code": "1060",
+    "name": "Toyworld Johnsonville",
+    "region_name": "Wellington",
+    "region_code": "WGN"
+   }
+  ]
+ }
+}

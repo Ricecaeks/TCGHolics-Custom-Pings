@@ -12,7 +12,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Kmart NZ | `kmart` | per island (North / South), not per store | **live via Constructor.io** (discovery of Trading Cards newest-first, search, price, online stock, in/out per island). No add-to-cart link |
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
-| Toyworld | `toyworld` (Shopify) | — (online only) | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online stock, add-to-cart) |
+| Toyworld | `toyworld` (Shopify) | yes: quantities, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
 | Whitcoulls | `whitcoulls` | to confirm | recon pending |
 | Paper Plus | `paperplus` | to confirm | recon pending |
@@ -98,7 +98,18 @@ Farmers' site search is hosted by Constructor.io on `ac.cnstrc.com`, which isn't
 
 ## Toyworld (recon 2026-10-29)
 
-Shopify (`www.toyworld.co.nz`), so the generic adapter does everything, including add-to-cart links. The store-wide feed is mostly toys, so config `collections: ["trading-cards", "pokemon"]` makes discovery read only those collections (about 100 products). The sealed filter drops the Pokémon toys (model kits, Clip 'N' Go, plush...) and keeps the TCG product (Lorcana boosters, starter decks, gift sets at the time of recon). Store stock isn't published.
+Shopify (`www.toyworld.co.nz`), so the generic adapter does everything, including add-to-cart links. The store-wide feed is mostly toys, so config `collections: ["trading-cards", "pokemon"]` makes discovery read only those collections (about 100 products). The sealed filter drops the Pokémon toys (model kits, Clip 'N' Go, plush...) and keeps the TCG product (Lorcana boosters, starter decks, gift sets at the time of recon).
+
+**Store stock (recon 2026-11-01):** the product page's "Find in Store" button uses Stock In Store (`stockinstore.net`), with no key or sign-in. Plain HTTP works, using the page's own requests.
+
+| Purpose | Request | Response |
+|---|---|---|
+| Store list | `POST /stores/getStoresForWidget` with `site=10044&widget=51` | `response.stores_list`: `code`, `name`, `region_name` (36 stores) |
+| Store stock | `POST /stores/getStoresStock` with `pid=<barcode>&storeids=<codes>` plus the widget's other fields | `response[]`: `code`, `stock` (a quantity), `recordUpdatedAt`. About 360 KB, under a second |
+
+- The barcode comes from `/products/<handle>.js` (`variants[].barcode`). "Assorted" products have several, and their quantities are added together.
+- Every sealed product discovery finds gets a store check, at most every 15 minutes.
+- **Not known yet:** how often the data updates (all stores showed one batch time), and how to look up in-store products Toyworld doesn't list online. These need a barcode from elsewhere.
 
 ## Kmart NZ (recon 2026-10-29)
 
