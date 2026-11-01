@@ -199,3 +199,15 @@ async def test_fetch_products_by_sku_via_constructor():
     [p] = await a.fetch_products(["7044417"])
     assert p.title == "Pokemon Trading Card Mega Zygarde EX Premium Collection Box"
     assert await a.fetch_products(["1234567"]) == []
+
+
+async def test_fetch_products_falls_back_to_the_category_listing():
+    class SearchMisses(FakeJsonHttp):
+        async def get_json(self, policy, url, params=None, **kw):
+            await super().get_json(policy, url, params)
+            return {"response": {"results": []}} if "/search/" in url else self.data
+
+    a = FarmersAdapter(ROW, SearchMisses(load_fixture("farmers", "constructor-search.json")))
+    [p] = await a.fetch_products(["7044417"])
+    assert p.sku == "7044417"
+    assert a.http.calls[-1][0] == "https://ac.cnstrc.com/browse/group_id/51-070502"

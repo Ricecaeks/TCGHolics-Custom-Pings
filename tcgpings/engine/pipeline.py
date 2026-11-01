@@ -13,11 +13,11 @@ from typing import Any
 
 import asyncpg
 
-from tcgpings.classify import classify
+from tcgpings.classify import classify, is_single_card
 from tcgpings.db import queries
 from tcgpings.engine.diff import diff_state, new_product_event
 from tcgpings.engine.router import RouteCache, match_routes
-from tcgpings.models import ANY_STORE, ONLINE, Event, Level, Product, Stock
+from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, Level, Product, Stock
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ class Pipeline:
                 prev = await queries.apply_state(
                     conn, product.retailer_id, product.sku, ONLINE, product.online, product.price_cents
                 )
-                events += diff_state(product, ONLINE, None, prev, product.online, product.price_cents)
+                changes = diff_state(product, ONLINE, None, prev, product.online, product.price_cents)
+                # Single cards reprice constantly: the change is recorded, but not worth an alert.
+                events += [e for e in changes if not (e.type is EventType.PRICE_CHANGE and is_single_card(product.title))]
 
             for store_id, stock in (store_stock or {}).items():
                 if stock.level is Level.UNKNOWN:

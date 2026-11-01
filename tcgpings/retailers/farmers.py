@@ -173,7 +173,7 @@ def parse_store_stock(page: str) -> dict[str, Stock]:
 class FarmersAdapter(RetailerAdapter):
     adapter_name = "farmers"
     supports_store_stock = True
-    # Store stock refreshes once a day (~8am), so each product is checked once a day after that.
+    # The site says store stock was "updated at 8am this morning", so each product is checked once a day after that.
     store_stock_daily_at = time(8, 30)
     default_sku_interval = 15 * 60
     default_search_interval = 30 * 60
@@ -220,9 +220,15 @@ class FarmersAdapter(RetailerAdapter):
 
     async def fetch_products(self, skus: list[str]) -> list[Product]:
         products = []
-        for sku in skus:  # Constructor finds a product by its SKU
-            products += [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
-                         if p.sku == sku]
+        missing = set()
+        for sku in skus:  # Constructor finds most products by their SKU
+            found = [p for p in await self._constructor(f"/search/{quote(sku)}", num_results_per_page="5")
+                     if p.sku == sku]
+            products += found
+            if not found:
+                missing.add(sku)
+        if missing:  # Search misses some (the 30th Booster Bundle, 7064593); the category listing has them
+            products += [p for p in await self.discover() if p.sku in missing]
         return products
 
     async def refresh_details(self, product: Product) -> None:
