@@ -5,7 +5,7 @@ Its catalogue is mostly toys, so discovery reads only the card collections inste
 store-wide feed.
 
 Store stock: the product page's "Find in Store" button uses Stock In Store (stockinstore.net), which
-answers per store, by barcode, with a quantity. No key or sign-in; these are the page's own requests.
+answers per store, by barcode, with a stock level. No key or sign-in; these are the page's own requests.
 """
 
 from __future__ import annotations
@@ -22,6 +22,9 @@ HEADERS = {"Origin": "https://www.toyworld.co.nz", "Referer": "https://www.toywo
 WIDGET_FORM = {"site": "10044", "widget": "51", "widgetType": "product", "lang": "en", "isajax": "1",
                "info": "none", "preview": "false"}
 AUCKLAND = "-36.85_174.76"  # the widget always sends a location; every store is requested by code anyway
+# The answer's `stock` is only 0 or 1, so the level comes from the threshold the widget displays.
+LEVELS = {"in-stock": Level.IN, "low-stock": Level.LOW, "out-of-stock": Level.OUT}
+BEST_FIRST = (Level.IN, Level.LOW, Level.OUT)
 
 
 def parse_store_list(data: dict) -> list[dict]:
@@ -35,15 +38,14 @@ def parse_store_list(data: dict) -> list[dict]:
     return stores
 
 
-def parse_store_quantities(data: dict) -> dict[str, int]:
-    """Store code -> quantity. A store with an unreadable quantity is left out rather than called empty."""
-    quantities = {}
+def parse_store_levels(data: dict) -> dict[str, Level]:
+    """Store code -> level. A store with an unrecognised level is left out rather than called empty."""
+    levels = {}
     for s in data.get("response") or []:
-        try:
-            quantities[s["code"]] = max(int(s["stock"]), 0)
-        except (KeyError, TypeError, ValueError):
-            continue
-    return quantities
+        level = LEVELS.get((s.get("threshold") or {}).get("threshold_type_by"))
+        if level and s.get("code"):
+            levels[s["code"]] = level
+    return levels
 
 
 @register
@@ -84,14 +86,15 @@ class ToyworldAdapter(ShopifyAdapter):
         return [str(v["barcode"]) for v in data.get("variants") or [] if v.get("barcode")]
 
     async def store_stock(self, sku: str, store_ids: list[str]) -> dict[str, Stock]:
-        totals: dict[str, int] = {}
+        best: dict[str, Level] = {}
         for barcode in await self._barcodes(sku):  # "assorted" products have one barcode per variant
             data = await self._post("/stores/getStoresStock", {
                 "timezoneOffsetMinutes": "780", "pid": barcode, "storeids": ",".join(store_ids),
                 "latlong": AUCKLAND, "thresholdType": "cnc",
                 "items": json.dumps([{"upi": barcode, "quantity": "1"}]),
             })
-            for store_id, qty in parse_store_quantities(data).items():
-                totals[store_id] = totals.get(store_id, 0) + qty
+            for store_id, level in parse_store_levels(data).items():
+                if store_id not in best or BEST_FIRST.index(level) < BEST_FIRST.index(best[store_id]):
+                    best[store_id] = level
         wanted = set(store_ids)
-        return {sid: Stock(Level.IN if qty else Level.OUT, qty) for sid, qty in totals.items() if sid in wanted}
+        return {sid: Stock(level) for sid, level in best.items() if sid in wanted}

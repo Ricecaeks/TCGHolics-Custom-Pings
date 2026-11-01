@@ -2,10 +2,9 @@
 
 from conftest import load_fixture
 
-from tcgpings.discord.embeds import build_embed
-from tcgpings.models import Event, EventType, Level
+from tcgpings.models import Level
 from tcgpings.net.http import FetchError
-from tcgpings.retailers.toyworld import ToyworldAdapter, parse_store_list, parse_store_quantities
+from tcgpings.retailers.toyworld import ToyworldAdapter, parse_store_list, parse_store_levels
 
 ROW = {
     "id": "toyworld", "adapter": "toyworld", "name": "Toyworld", "config": ToyworldAdapter.default_retailers[0][2],
@@ -49,10 +48,15 @@ def test_parse_store_list_drops_the_brand_from_names():
     assert stores[0] == {"store_id": "1120", "name": "Waihi", "region": "Waikato"}
 
 
-def test_parse_quantities_skips_unreadable_rows():
-    assert parse_store_quantities({"response": [
-        {"code": "A", "stock": "3"}, {"code": "B", "stock": "-1"}, {"code": "C", "stock": None}, {"stock": "1"},
-    ]}) == {"A": 3, "B": 0}
+def level_row(code, label):
+    return {"code": code, "stock": "1", "threshold": {"threshold_type_by": label}}
+
+
+def test_parse_levels_uses_the_displayed_threshold_and_skips_unknown_ones():
+    assert parse_store_levels({"response": [
+        level_row("A", "in-stock"), level_row("B", "low-stock"), level_row("C", "out-of-stock"),
+        level_row("D", "something-new"), {"code": "E", "stock": "1"},
+    ]}) == {"A": Level.IN, "B": Level.LOW, "C": Level.OUT}
 
 
 async def test_list_stores():
@@ -60,23 +64,23 @@ async def test_list_stores():
     assert stores[0].store_id == "1120" and stores[0].name == "Waihi" and stores[0].region == "Waikato"
 
 
-async def test_store_stock_reads_quantities_by_barcode():
+async def test_store_stock_reads_levels_by_barcode():
     http = FakeHttp({JS: {"variants": [{"barcode": "4050368984227"}]}})
-    stock = await adapter(http).store_stock("booster", ["1065", "1120", "NPL1"])
+    stock = await adapter(http).store_stock("booster", ["1065", "1073", "1120"])
     assert {k: (v.level, v.qty) for k, v in stock.items()} == {
-        "1065": (Level.IN, 1), "1120": (Level.OUT, 0), "NPL1": (Level.OUT, 0),
+        "1065": (Level.IN, None), "1073": (Level.LOW, None), "1120": (Level.OUT, None),
     }
     method, url, form = http.posts[0]
     assert (method, url) == ("POST", "https://stockinstore.net/stores/getStoresStock")
-    assert form["pid"] == "4050368984227" and form["storeids"] == "1065,1120,NPL1" and form["site"] == "10044"
+    assert form["pid"] == "4050368984227" and form["storeids"] == "1065,1073,1120" and form["site"] == "10044"
 
 
-async def test_assorted_products_add_up_across_barcodes():
+async def test_assorted_products_take_the_best_level_across_barcodes():
     def stock(form):
-        return {"response": [{"code": "A", "stock": "2" if form["pid"] == "111" else "3"}]}
+        return {"response": [level_row("A", "out-of-stock" if form["pid"] == "111" else "low-stock")]}
 
     http = FakeHttp({JS: {"variants": [{"barcode": "111"}, {"barcode": "222"}, {"barcode": ""}]}}, stock)
-    assert (await adapter(http).store_stock("booster", ["A"]))["A"].qty == 5
+    assert (await adapter(http).store_stock("booster", ["A"]))["A"].level is Level.LOW
     assert len(http.posts) == 2
 
 
@@ -89,11 +93,3 @@ async def test_unlisted_product_reports_nothing_rather_than_all_out():
 async def test_empty_answer_reports_nothing_rather_than_all_out():
     http = FakeHttp({JS: {"variants": [{"barcode": "111"}]}}, {"response": []})
     assert await adapter(http).store_stock("booster", ["A"]) == {}
-
-
-def test_alert_lists_store_quantities():
-    event = Event(type=EventType.RESTOCK, retailer_id="toyworld", sku="x", title="Pokemon Bundle", url="https://x",
-                  store_id="*1", store_name="2 stores", old_level="out", new_level="in", new_qty=3,
-                  stores=[{"id": "a", "name": "Albany", "qty": 3}, {"id": "b", "name": "Botany", "qty": None}])
-    stores = next(f for f in build_embed(event).fields if f.name.startswith("Stores"))
-    assert stores.value == "Albany [3], Botany"

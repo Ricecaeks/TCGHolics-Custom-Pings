@@ -111,6 +111,6 @@ def merge_store_events(events: list[Event]) -> list[Event]:
         merged = Event.from_payload(first.to_payload())
         merged.store_id = f"*{zlib.crc32(ids.encode()):08x}"
         merged.store_name = f"{len(group)} stores"
-        merged.stores = [{"id": e.store_id, "name": e.store_name or e.store_id, "qty": e.new_qty} for e in group]
+        merged.stores = [{"id": e.store_id, "name": e.store_name or e.store_id} for e in group]
         out.append(merged)
     return out

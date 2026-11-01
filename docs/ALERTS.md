@@ -96,7 +96,7 @@ Farmers' site says store stock was "updated at 8am this morning" (fixed text, no
 | JB Hi-Fi | ✅ | ✅ | ✅ | ✅ 27 stores | ✅ |
 | Farmers | ✅ (via Constructor) | ✅ | ✅ daily | ✅ daily, 53 stores (via the fetch chain) | — |
 | The Warehouse | ✅ | ✅ (incl. "in stores only") | ✅ | — | — |
-| Toyworld | ✅ | ✅ | ✅ | ✅ 36 stores, with quantities | ✅ |
+| Toyworld | ✅ | ✅ | ✅ | ✅ 36 stores, in / low / out | ✅ |
 | Shopify card shops | ✅ | ✅ | ✅ | — | ✅ |
 | Kmart | ✅ (via Constructor) | ✅ (most Pokémon is in-store only) | ✅ | per island: North / South | — |
 | Noel Leeming, … | coming | | | | |

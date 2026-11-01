@@ -5,35 +5,50 @@
    "store_name": "Toyworld Palmerston North",
    "stock": "1",
    "recordUpdatedAt": "2026-11-01 05:27:30",
-   "upi": "4050368984227"
+   "threshold": {
+    "threshold_type": "fis",
+    "threshold_type_by": "in-stock"
+   }
   },
   {
    "code": "1073",
    "store_name": "Toyworld Lower Hutt",
    "stock": "1",
    "recordUpdatedAt": "2026-11-01 05:27:30",
-   "upi": "4050368984227"
+   "threshold": {
+    "threshold_type": "fis",
+    "threshold_type_by": "low-stock"
+   }
   },
   {
    "code": "1120",
    "store_name": "Toyworld Waihi",
    "stock": "0",
    "recordUpdatedAt": "2026-11-01 05:27:30",
-   "upi": "4050368984227"
+   "threshold": {
+    "threshold_type": "fis",
+    "threshold_type_by": "out-of-stock"
+   }
   },
   {
    "code": "1119",
    "store_name": "Toyworld Te Awamutu",
    "stock": "0",
    "recordUpdatedAt": "2026-11-01 05:27:30",
-   "upi": null
+   "threshold": {
+    "threshold_type": "fis",
+    "threshold_type_by": "out-of-stock"
+   }
   },
   {
    "code": "NPL1",
    "store_name": "Toyworld New Plymouth",
    "stock": "0",
    "recordUpdatedAt": "2026-11-01 05:27:30",
-   "upi": null
+   "threshold": {
+    "threshold_type": "fis",
+    "threshold_type_by": "out-of-stock"
+   }
   }
  ]
 }

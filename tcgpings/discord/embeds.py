@@ -61,7 +61,7 @@ def build_embed(event: Event) -> discord.Embed:
         embed.add_field(name="Price", value=format_price(event.new_price))
 
     if event.stores:
-        names = [f"{s['name']} [{s['qty']}]" if s.get("qty") else s["name"] for s in event.stores]
+        names = [s["name"] for s in event.stores]
         shown = ", ".join(names[:25]) + (f" (+{len(names) - 25} more)" if len(names) > 25 else "")
         embed.add_field(name=f"Stores ({len(names)})", value=shown[:1024], inline=False)
     else:
