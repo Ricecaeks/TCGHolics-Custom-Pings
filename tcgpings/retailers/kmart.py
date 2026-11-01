@@ -10,7 +10,8 @@ Listings come from Constructor.io, the site's search (TCGHolics approved using K
 
 Store stock comes from the queries behind the product page's stock display, on Kmart's NZ gateway.
 No key or sign-in. A count for any postcode's five nearest stores, for many products at once, so a
-sweep asks one postcode at a time until every store has answered.
+sweep asks one postcode at a time until every store has answered. Akamai challenged this after about
+2.5 hours of sweeps every 5 minutes, so sweeps are slower now and back off hard when refused.
 """
 
 from __future__ import annotations
@@ -50,7 +51,8 @@ STOCK_QUERY = (
 )
 ALL_OF_NZ = {"lat": "-41.0", "lon": "174.0", "distance": "2000km", "limit": 100}
 BATCH = 100  # products per request; 85 is the most the category has had
-STORE_CHECK_SECONDS = 5 * 60
+STORE_CHECK_SECONDS = 15 * 60
+STORE_BACKOFF_LIMIT = 6 * 3600
 
 _SKU_IN_URL = re.compile(r"(\d{7,9})/?$")
 _NZ_SUFFIX = re.compile(r"\s+nz$", re.I)
@@ -122,6 +124,7 @@ class KmartAdapter(RetailerAdapter):
                      "i": str(uuid.uuid4()), "s": "1"}
         self._stores: list[dict] = []
         self._next_store_check = 0.0
+        self._store_failures = 0
 
     async def _constructor(self, path: str, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
@@ -145,9 +148,13 @@ class KmartAdapter(RetailerAdapter):
         if time.monotonic() >= self._next_store_check:
             try:
                 stock = await self._store_stock([p.sku for p in products if is_sealed_product(p.title)])
-            except FetchError as exc:  # the listings are still good; try the stores again next run
-                log.warning("kmart: store stock unavailable: %s", exc)
+            except FetchError as exc:  # the listings are still good; leave the stores alone for a while
+                self._store_failures += 1
+                wait = min(STORE_CHECK_SECONDS * 2 ** self._store_failures, STORE_BACKOFF_LIMIT)
+                self._next_store_check = time.monotonic() + wait
+                log.warning("kmart: store stock unavailable, next try in %d min: %s", wait // 60, exc)
             else:
+                self._store_failures = 0
                 self._next_store_check = time.monotonic() + STORE_CHECK_SECONDS
                 for product in products:
                     product.stores = stock.get(product.sku)

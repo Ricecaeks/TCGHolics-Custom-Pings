@@ -60,9 +60,9 @@ To see every alert in one place without the bot, create a webhook in that channe
 
 1. **Discovery runs on its own.** Every enabled retailer's TCG range is scanned every 2–3 minutes for new listings, stock changes and price changes. You don't need to "watch" anything for this.
 2. **Routes decide what goes where.** A route says "alerts from *this retailer / store / game*, whose title matches *these keywords*, go to *this channel*, pinging *this role*". A channel can have several routes.
-3. **Watches are optional extras.** `/watch add query:...` adds a targeted search, which is useful for older products that discovery's "newest" scan wouldn't see, or for a specific product URL.
+3. **Watches are for hot sets.** `/watch add query:...` searches every retailer, so a named set like `delta reign` is found even where a category scan doesn't reach it. They also suit a specific product URL. Member `/ping` keywords only filter alerts for products already found, so add a watch when a new set is announced. Found products at Farmers get a paid daily store check.
 
-Only **sealed product** from Pokémon, One Piece, Riftbound, Magic, Lorcana and Yu-Gi-Oh! is announced from discovery. Singles, sleeves, portfolios and other merch are skipped.
+Only **sealed product** from Pokémon, One Piece, Riftbound, Magic, Lorcana and Yu-Gi-Oh! is announced from discovery and watches. Singles, sleeves, portfolios and other merch are skipped.
 
 ## Keywords
 

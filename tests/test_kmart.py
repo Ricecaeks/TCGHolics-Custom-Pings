@@ -1,5 +1,7 @@
 """Kmart adapter: Constructor listings (fixture trimmed from the live Trading Cards browse)."""
 
+import time
+
 from conftest import load_fixture
 
 from tcgpings.discord.embeds import build_embed
@@ -114,13 +116,27 @@ async def test_discover_attaches_sealed_store_stock_and_checks_stores_less_often
     assert second["43818617"].stores is None and len(http.asked) == asked
 
 
-async def test_a_store_stock_failure_keeps_the_listings_and_retries_next_run():
+async def test_a_store_stock_failure_keeps_the_listings_and_backs_off():
     http = FakeHttp(fail=FetchError("POST: HTTP 429", 429))
     a = KmartAdapter(ROW, http)
     products = await a.discover()
     assert products and all(p.stores is None for p in products)
+    first_wait = a._next_store_check - time.monotonic()
+    assert 29 * 60 < first_wait <= 30 * 60
+
+    http.fail = None
+    assert all(p.stores is None for p in await a.discover())  # still waiting, so nothing was asked
+    assert http.asked == []
+
+    a._next_store_check = 0
+    http.fail = FetchError("POST: HTTP 429", 429)
+    await a.discover()
+    assert a._next_store_check - time.monotonic() > first_wait * 1.9
+
+    a._next_store_check = 0
     http.fail = None
     assert any(p.stores for p in await a.discover())
+    assert a._store_failures == 0
 
 
 def test_alert_lists_store_counts():
