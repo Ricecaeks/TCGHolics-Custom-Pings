@@ -134,7 +134,8 @@ kmart.co.nz is behind Akamai, but its search runs on Constructor.io (`ac.cnstrc.
 | `getNearestLocations` | `lat`, `lon`, `distance: "2000km"`, `limit` | every store: `locationId` (e.g. `8229` Sylvia Park), `publicName`, `state`, `postcode` |
 | `getProductAvailability` | `country`, `postcode`, `products: [{keycode, ...}]`, `fulfilmentMethods: ["CLICK_AND_COLLECT"]` | per product, the postcode's 5 nearest stores with `fulfilment.stock.available`, a **unit count** |
 
-- **A sweep:** one product batch per postcode, skipping stores already answered. 8 postcodes covered all 28 stores for 54 products in one test, every 5 minutes in the bot.
+- **A sweep:** one product batch per postcode, skipping stores already answered. 8 postcodes covered all 28 stores for 54 products in one test.
+- **Akamai:** after about 2.5 hours of sweeps every 5 minutes on 2026-11-01, every request got `429` with `{"cpr_chlge":"true"}`, a bot challenge we don't solve. Sweeps now run every 15 minutes, and a refusal backs off from 30 minutes up to 6 hours. Whether that's slow enough isn't known yet.
 - **Checked:** Surging Sparks showed 10 at Sylvia Park while the site said in stock there, and Hot Wheels showed 0 where the site said out of stock. A fake product code showed 0 everywhere.
 - **Not used:** `getFindInStore`, which the "check stock nearby" window calls. It returns `High`, `Medium` or `Low`, and a fake product code also gets `Low`. On kmart.co.nz that window sends it to `api.kmart.com.au`, which returned 429 in testing and made the window say "No nearby stores available".
 - **Not explained:** some very large counts (Rotorua showed 286 of one product). Counts are what the system holds, and stock may not be on the shelf yet.

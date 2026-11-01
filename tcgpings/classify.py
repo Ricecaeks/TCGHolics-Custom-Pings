@@ -43,7 +43,8 @@ NON_CARD = re.compile(
     r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*n\W*go|surprise\s*attack|battle\s*game|"
     r"bandolier|monopoly|guess\s*who|"
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
-    r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d",
+    r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d|"
+    r"socks|trunks|trainers|wrapping|gift\s*bag|\blamp\b|alarm\s*clock|comforter|\bthrow\b|christmas\s*cards|ticket",
     re.I,
 )
 
@@ -83,8 +84,8 @@ def is_card_product(title: str, franchise: str | None = None) -> bool:
 def is_sealed_product(title: str, franchise: str | None = None, ptype: str | None = None) -> bool:
     """Sealed product from one of our games (boxes, bundles, packs, tins, decks, named sets...).
 
-    Discovery uses this so singles ("Charizard ex (199/165)") and accessories (sleeves,
-    portfolios) don't flood channels; explicit keyword watches still see everything. Titles
+    Discovery and keyword watches use this so singles ("Charizard ex (199/165)") and accessories
+    (sleeves, portfolios) don't flood channels. Titles
     with no recognisable type still count ("Disney Lorcana Azurite Sea" is a set release).
     """
     ptype = ptype or ptype_of(title)

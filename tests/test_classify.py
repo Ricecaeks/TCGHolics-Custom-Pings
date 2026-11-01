@@ -114,3 +114,11 @@ def test_binder_collection_is_sealed_but_a_binder_is_not():
 
     assert is_sealed_product("Pokemon TCG: 30th Celebration Binder Collection")
     assert not is_sealed_product("Pokemon TCG: Ultra Pro 9-Pocket Binder")
+
+
+@pytest.mark.parametrize("title", [
+    "Pokemon Boys' Crew Socks 2 Pack", "Pokemon Christmas Wrapping Paper", "Teknofun Pokemon Happy Pikachu 25cm LED Lamp",
+    "Pokemon Throw 127cm x 152cm", "Pokemon - Delta Reign Pre-Release Ticket",
+])
+def test_merchandise_and_event_tickets_are_not_card_products(title):
+    assert not is_card_product(title)

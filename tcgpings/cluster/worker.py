@@ -11,7 +11,7 @@ from datetime import time as dt_time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from tcgpings.classify import is_card_product, is_sealed_product
+from tcgpings.classify import is_sealed_product
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.engine.pipeline import classify_product
@@ -229,7 +229,7 @@ class Worker:
         results = await adapter.search(payload["query"])
         kept = 0
         for product in results:
-            if not is_card_product(product.title, product.franchise):
+            if not is_sealed_product(product.title, product.franchise, product.ptype):
                 continue
             classify_product(product)
             if franchise and product.franchise != franchise:
