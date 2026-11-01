@@ -120,12 +120,12 @@ async def test_a_store_stock_failure_keeps_the_listings_and_backs_off():
     http = FakeHttp(fail=FetchError("POST: HTTP 429", 429))
     a = KmartAdapter(ROW, http)
     products = await a.discover()
-    assert products and all(p.stores is None for p in products)
+    assert products and all(set(p.stores or {}) <= {"NI", "SI"} for p in products)
     first_wait = a._next_store_check - time.monotonic()
     assert 29 * 60 < first_wait <= 30 * 60
 
     http.fail = None
-    assert all(p.stores is None for p in await a.discover())  # still waiting, so nothing was asked
+    assert all(set(p.stores or {}) <= {"NI", "SI"} for p in await a.discover())  # still waiting, so nothing was asked
     assert http.asked == []
 
     a._next_store_check = 0
@@ -153,3 +153,18 @@ def test_parse_ref():
     assert a.parse_ref("https://www.kmart.co.nz/product/pokemon-tcg:-30th-celebration-booster-bundle-43818617/") == "43818617"
     assert a.parse_ref("https://www.kmart.co.nz/product/43818273/") == "43818273"
     assert a.matches_url("https://www.kmart.co.nz/product/43818273/")
+
+
+async def test_islands_cover_only_in_store_products_and_only_while_store_stock_is_down():
+    http = FakeHttp(fail=FetchError("POST: HTTP 429", 429))
+    a = KmartAdapter(ROW, http)
+    down = {p.sku: p for p in await a.discover()}
+    assert {k: s.level for k, s in down["43788798"].stores.items()} == {"NI": Level.IN, "SI": Level.OUT}
+    assert a.store_label("NI") == "North Island"
+    assert down["43818273"].stores is None  # sold online, so its flags can include warehouse stock
+
+    a._next_store_check, http.fail = 0, None
+    up = {p.sku: p for p in await a.discover()}
+    assert "NI" not in up["43788798"].stores and "8229" in up["43788798"].stores
+
+    assert all(p.stores is None for p in await a.search("pokemon"))

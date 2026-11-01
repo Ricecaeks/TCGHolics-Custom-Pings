@@ -102,9 +102,10 @@ async def deliver(
         log.info("[dry-run] %s | %s | %s | %s %s", embed.author.name, embed.title, embed.description, fields, content or "")
         return
     webhook = discord.Webhook.from_url(webhook_url, session=session)
-    await webhook.send(content=content, embed=embed, allowed_mentions=_mentions(tagged, role_id))
+    # wait=True makes Discord confirm the post, so a failed one raises and is retried.
+    await webhook.send(content=content, embed=embed, allowed_mentions=_mentions(tagged, role_id), wait=True)
     for text, users in messages[1:]:
-        await webhook.send(content=text, allowed_mentions=_mentions(users))
+        await webhook.send(content=text, allowed_mentions=_mentions(users), wait=True)
 
 
 def _mentions(users: list[int], role_id: int | None = None) -> discord.AllowedMentions:

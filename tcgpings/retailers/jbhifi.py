@@ -74,6 +74,7 @@ class JBHiFiAdapter(ShopifyAdapter):
     track_all_discovered = True  # a small sealed range, and any member can ping on any of it
     store_stock_interval = 10 * 60   # product pages are ~600 KB; store stock doesn't move by the second
     default_sku_interval = 10 * 60  # online stock also comes from discovery every 3 minutes
+    hot_sku_interval = 2 * 60
     default_requests_per_minute = 20
     default_retailers = [
         ("jbhifi", "JB Hi-Fi", {"domain": "www.jbhifi.co.nz", "catalogue_pages": 1, "discover_pages": 1,

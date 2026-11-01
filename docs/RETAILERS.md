@@ -122,7 +122,7 @@ kmart.co.nz is behind Akamai, but its search runs on Constructor.io (`ac.cnstrc.
 - Per result: `data.variation_id` (the product number in the URL), `value` (title), `data.url`, `data.image_url`, `data.price` (NZD).
 - **`data.stateOOS`** lists the islands where the product is out of stock, e.g. `{"SI": "6"}`. An island that isn't listed has stock. The site's "Out of Stock Online" label matches products listed for both islands.
 - **`data.FulfilmentChannel`**: `3` = online and in store (the product page offers "Add to bag" and home delivery); `2` = **in-store only**, which covers most Pokémon. Checked on product pages.
-- Island flags include warehouse stock: on 2026-11-01 a product flagged in stock showed 17 in a home-delivery pool and 0 in stores. So they only decide online stock (IN when it ships online and an island has it).
+- Island flags can include warehouse stock: on 2026-11-01 a product flagged in stock showed 17 in a home-delivery pool and 0 in stores. So they decide online stock (IN when it ships online and an island has it), and they only act as store stock for in-store-only products while store counts are unavailable.
 - In-store-only products are always OUT online and carry an "In-store only" note on alerts. Their restocks show up in `#kmart-instore`.
 
 ### Kmart store stock (recon 2026-11-01)

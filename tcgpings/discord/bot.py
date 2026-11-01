@@ -32,6 +32,12 @@ class TCGBot(discord.Client):
             synced = await self.tree.sync()  # global commands can take up to an hour to appear
         log.info("synced %d slash commands", len(synced))
 
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        if interaction.type is discord.InteractionType.component and interaction.data.get("custom_id", "").startswith("hot:"):
+            from tcgpings.discord.hot import on_button
+
+            await on_button(interaction)
+
     async def on_ready(self) -> None:
         log.info("discord bot connected as %s", self.user)
 

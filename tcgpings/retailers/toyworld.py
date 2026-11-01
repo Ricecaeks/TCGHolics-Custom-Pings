@@ -54,7 +54,8 @@ class ToyworldAdapter(ShopifyAdapter):
     supports_store_stock = True
     track_all_discovered = True  # a small sealed range, and one cheap request per product
     store_stock_interval = 15 * 60  # each answer is ~360 KB, and stock updates in batches
-    default_sku_interval = 5 * 60
+    default_sku_interval = 15 * 60
+    hot_sku_interval = 5 * 60
     default_discover_interval = 5 * 60
     default_requests_per_minute = 12
     default_retailers = [

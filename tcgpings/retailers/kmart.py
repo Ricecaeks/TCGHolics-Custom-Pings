@@ -5,7 +5,8 @@ Listings come from Constructor.io, the site's search (TCGHolics approved using K
 - Search:     /search/<q>; a product's SKU finds it too.
 - Price:      data.price (NZD).
 - Online:     data.stateOOS lists the islands that are out of stock, e.g. {"SI": "6"}. These flags
-              include warehouse stock, so they say nothing about individual stores.
+              can include warehouse stock, so they say nothing about individual stores. While store
+              stock is unavailable they're the fallback for in-store-only products, which have no other signal.
 - Fulfilment: data.FulfilmentChannel 3 = online and in store, 2 = in-store only (most Pokémon).
 
 Store stock comes from the queries behind the product page's stock display, on Kmart's NZ gateway.
@@ -35,7 +36,7 @@ CONSTRUCTOR = "https://ac.cnstrc.com"
 CONSTRUCTOR_KEY = "key_EyiTrcbGw7IFH3wR"  # public client key embedded in kmart.co.nz pages
 TRADING_CARDS_GROUP = "c00f65271ffae599a4b675da63b2e92d"  # Toys > Toys by Category > Trading Cards
 IN_STORE_ONLY = 2
-ISLANDS = {"NI", "SI"}
+ISLANDS = {"NI": "North Island", "SI": "South Island"}
 
 GATEWAY = "https://api.kmart.co.nz/gateway/graphql"
 HEADERS = {"Origin": BASE, "Referer": f"{BASE}/"}
@@ -66,7 +67,8 @@ def parse_constructor(data: dict, retailer_id: str = "kmart") -> list[Product]:
         if not sku:
             continue
         in_store_only = d.get("FulfilmentChannel") == IN_STORE_ONLY
-        anywhere = not ISLANDS <= set((d.get("stateOOS") or {}).keys())
+        out = set((d.get("stateOOS") or {}).keys())
+        anywhere = not set(ISLANDS) <= out
         url = d.get("url") or f"/product/{sku}/"
         products.append(Product(
             retailer_id=retailer_id,
@@ -76,6 +78,7 @@ def parse_constructor(data: dict, retailer_id: str = "kmart") -> list[Product]:
             image=d.get("image_url"),
             price_cents=to_cents(d.get("price")),
             online=Stock(Level.IN if anywhere and not in_store_only else Level.OUT),
+            stores={i: Stock(Level.OUT if i in out else Level.IN) for i in ISLANDS} if in_store_only else None,
             note="In-store only" if in_store_only else None,
         ))
     return products
@@ -126,9 +129,13 @@ class KmartAdapter(RetailerAdapter):
         self._next_store_check = 0.0
         self._store_failures = 0
 
-    async def _constructor(self, path: str, **params: str) -> list[Product]:
+    async def _constructor(self, path: str, keep_islands: bool = False, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
-        return parse_constructor(data, self.retailer_id)
+        products = parse_constructor(data, self.retailer_id)
+        if not keep_islands:
+            for product in products:
+                product.stores = None
+        return products
 
     async def _gateway(self, operation: str, query: str, variables: dict) -> dict:
         resp = await self.http.request(
@@ -143,11 +150,12 @@ class KmartAdapter(RetailerAdapter):
     async def discover(self) -> list[Product]:
         products = await self._constructor(
             f"/browse/group_id/{self.config.get('group_id', TRADING_CARDS_GROUP)}",
-            sort_by="numberOfDaysSinceStartDate", sort_order="ascending", num_results_per_page="200",
+            keep_islands=True, sort_by="numberOfDaysSinceStartDate", sort_order="ascending", num_results_per_page="200",
         )
+        counts = None
         if time.monotonic() >= self._next_store_check:
             try:
-                stock = await self._store_stock([p.sku for p in products if is_sealed_product(p.title)])
+                counts = await self._store_stock([p.sku for p in products if is_sealed_product(p.title)])
             except FetchError as exc:  # the listings are still good; leave the stores alone for a while
                 self._store_failures += 1
                 wait = min(STORE_CHECK_SECONDS * 2 ** self._store_failures, STORE_BACKOFF_LIMIT)
@@ -156,8 +164,9 @@ class KmartAdapter(RetailerAdapter):
             else:
                 self._store_failures = 0
                 self._next_store_check = time.monotonic() + STORE_CHECK_SECONDS
-                for product in products:
-                    product.stores = stock.get(product.sku)
+        if not self._store_failures:  # islands are only for when store stock is unavailable
+            for product in products:
+                product.stores = (counts or {}).get(product.sku)
         return products
 
     async def _store_stock(self, skus: list[str]) -> dict[str, dict[str, Stock]]:
@@ -201,6 +210,8 @@ class KmartAdapter(RetailerAdapter):
         return [Store(self.retailer_id, s["store_id"], s["name"], s["region"]) for s in stores]
 
     def store_label(self, store_id: str) -> str:
+        if store_id in ISLANDS:
+            return ISLANDS[store_id]
         return next((s["name"] for s in self._stores if s["store_id"] == store_id), f"Store {store_id}")
 
     def parse_ref(self, ref: str) -> str:
