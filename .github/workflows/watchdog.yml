@@ -1,0 +1,45 @@
+# Posts to Discord when the bot's machine stops sending heartbeats, and again when it's back.
+# An open "Bot offline" issue records the outage, so each one alerts once.
+name: watchdog
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      max_age_minutes:
+        description: Heartbeat age that counts as offline (0 tests the alert)
+        default: "60"
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      WEBHOOK: ${{ secrets.TEST_CHANNEL_WEBHOOK }}
+      MAX_AGE_MINUTES: ${{ inputs.max_age_minutes || '60' }}
+    steps:
+      - name: Compare the last heartbeat with the open outage
+        run: |
+          post() {
+            jq -n --arg content "$1" '{content: $content, allowed_mentions: {parse: []}}' |
+              curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
+          }
+          last=$(gh run list --workflow heartbeat.yml --status success --limit 1 --json createdAt -q '.[0].createdAt')
+          if [ -z "$last" ]; then echo "No heartbeat yet"; exit 0; fi
+          age=$(( ($(date +%s) - $(date -d "$last" +%s)) / 60 ))
+          echo "Last heartbeat $age minutes ago"
+          issue=$(gh issue list --state open --search 'in:title "Bot offline"' --json number -q '.[0].number')
+          if [ "$age" -ge "$MAX_AGE_MINUTES" ] && [ -z "$issue" ]; then
+            gh issue create --title "Bot offline" --body "No healthy heartbeat since $last."
+            post ":warning: **Stock alerts are offline.** No healthy heartbeat from GGPC for $age minutes, so drops may be missed."
+          elif [ "$age" -lt "$MAX_AGE_MINUTES" ] && [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Heartbeats are back."
+            post ":white_check_mark: **Stock alerts are back online.** Anything that changed during the outage alerts on the next check."
+          fi

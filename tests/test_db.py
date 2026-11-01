@@ -215,3 +215,19 @@ async def test_default_retailers_seeded_and_operator_choice_sticks(pool):
     await queries.update_retailer(pool, "farmers", enabled=False)
     await seed_retailers(ctx)  # a restart must not switch it back on
     assert (await queries.get_retailer(pool, "farmers"))["enabled"] is False
+
+
+async def test_single_card_price_change_is_recorded_without_an_alert(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+
+    def card(price):
+        return Product("farmers", "mage", "Pokemon Stingcaster Mage [Reality Fracture]", "https://x/mage",
+                       price_cents=price, online=Stock(Level.IN))
+
+    await pipe.record(RETAILER, card(400))
+    assert await pipe.record(RETAILER, card(350)) == []
+    assert await outbox(pool) == []
+    assert await pool.fetchval("SELECT price_cents FROM product_state WHERE sku = 'mage'") == 350
+    await pipe.record(RETAILER, product(price=5999))
+    assert [e.type.value for e in await pipe.record(RETAILER, product(price=4999))] == ["price_change"]

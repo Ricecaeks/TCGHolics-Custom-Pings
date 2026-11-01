@@ -1,0 +1,24 @@
+# Runs on the bot's own machine, so a success proves the machine is awake and the bot healthy.
+# watchdog.yml runs on GitHub's side and raises the alarm when these successes stop.
+name: heartbeat
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency: heartbeat
+
+permissions: {}
+
+jobs:
+  beat:
+    runs-on: [self-hosted, tcgpings]
+    timeout-minutes: 5
+    steps:
+      - name: Check the bot is healthy
+        shell: powershell
+        run: |
+          $status = docker inspect -f '{{.State.Health.Status}}' tcgpings-local-node-1
+          "bot: $status"
+          if ($status -ne 'healthy') { exit 1 }

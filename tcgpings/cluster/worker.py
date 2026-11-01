@@ -142,6 +142,7 @@ class Worker:
         adapter = await self.ctx.adapters.get(job["retailer_id"])
         products = await adapter.fetch_products([payload["sku"]])
         if not products:
+            log.warning("%s: %s not found, so it wasn't checked", job["retailer_id"], payload["sku"])
             return
         product = products[0]
         stock, names = None, None

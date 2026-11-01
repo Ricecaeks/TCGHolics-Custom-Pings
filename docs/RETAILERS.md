@@ -44,14 +44,14 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 
 - **Regions** (`State`): NTL, AUK, WKO, BOP, GIS, TKI, MWT, HKB, WGN, NSN, CAN, OTA, STL.
 - **Stores are identified by name only.** There's no store ID. The full list of 53 is in [`tcgpings/retailers/data/farmers_stores.json`](../tcgpings/retailers/data/farmers_stores.json). **Westgate is listed as "Northwest"** (NorthWest Shopping Centre, Massey). "Home by Farmers" homewares stores don't stock cards and aren't returned.
-- **In-store stock refreshes once a day.** The modal says "Stock updated at 8am this morning", so polling store stock more than hourly is pointless. Online stock (JSON-LD) is live.
+- **In-store stock may refresh once a day (unproven).** The modal says "Stock updated at 8am this morning", but that's fixed text: it read the same at 3am on 2026-11-01. Online stock (JSON-LD) is live.
 - **Stock levels:** only "In Stock" and "Not In Stock" were seen. No counts.
 
 **Access:** the endpoints above go through the **fetch chain** (`tcgpings/net/chain.py`), in the order set by the retailer's `fetch` config (default `["browser", "scrapfly", "zyte"]`):
 1. our own Chrome (`net/browser.py`: Patchright driving Google Chrome, headed, Xvfb in Docker, persistent profile), free;
 2. ScrapFly, then 3. Zyte API, each only when its key is set in `.env`.
 
-- **Schedule:** new listings and online stock come from Constructor every 2 min (below). Each tracked product's store stock and price are checked **once a day**, at a fixed slot between 8:30 and 9:30am NZ time (store stock refreshes ~8am).
+- **Schedule:** new listings and online stock come from Constructor every 2 min (below). Each tracked product's store stock and price are checked **once a day**, at a fixed slot between 8:30 and 9:30am NZ time, after the 8am the site mentions. That's our schedule, not a Farmers one.
 - **Cost of a daily check:** 1 product page + 1 call per region with a wanted store (13 for all stores).
 - **Regions:** config `regions` limits them (default all 13). Once 80% of the month's unblocker budget is spent, only `priority_regions` are checked (default `["AUK"]`).
 - **Request budget:** 10 requests/min.

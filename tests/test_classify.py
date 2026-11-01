@@ -75,3 +75,35 @@ def test_is_sealed_product(title, franchise, expected):
     from tcgpings.classify import is_sealed_product
 
     assert is_sealed_product(title, franchise) is expected
+
+
+@pytest.mark.parametrize(
+    "title, single",
+    [
+        ("Stingcaster Mage [Reality Fracture]", True),
+        ("Q, Stacking the Deck (Showcase) (Surge Foil) [Star Trek]", True),
+        ("Traveling Chocobo (Borderless) (Chocobo Track Foil) [FINAL FANTASY]", True),
+        ("Resonating Strike [VEN - 034/166]", True),
+        ("Emissary Escort (EOE Bundle) [UMP - 399]", True),
+        ("Seraphine Not Alone (Alternate Art) - Radiance 138a/167", True),
+        ("Kai'Sa Rebel - Radiance SP4/005", True),
+        ("Body Rune (Alternate Art) - Radiance R04a", True),
+        ("Radiance - Vault Bundle [RAD]", False),
+        ("Attack of the Vine! Collection Starter Set - Rapunzel Edition [13]", False),
+        ("Pokemon 30th Celebration Booster Bundle [Pre-Order]", False),
+        ("**PRE-ORDER** MTG Play Booster Box - Star Trek", False),
+        ("Pokemon TCG 30th Celebration Booster Bundle - 2 per Customer", False),
+        ("Pokemon Trading Card Game: 30th Celebration Pokemon ex Box - Assorted", False),
+    ],
+)
+def test_is_single_card(title, single):
+    from tcgpings.classify import is_single_card
+
+    assert is_single_card(title) is single
+
+
+@pytest.mark.parametrize("title", ["One Piece Weekly Play - 19 Nov 2026", "Riftbound - Radiance Draft - 22 Nov 2026"])
+def test_store_events_are_not_card_products(title):
+    from tcgpings.classify import is_card_product
+
+    assert not is_card_product(title)
