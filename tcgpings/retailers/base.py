@@ -73,6 +73,10 @@ class RetailerAdapter(ABC):
     # synced but no per-product store calls are made.
     stock_in_listings: ClassVar[bool] = False
 
+    # True when store checks are cheap enough to run for every sealed product discovery finds,
+    # rather than only those matching a keyword route.
+    track_all_discovered: ClassVar[bool] = False
+
     def store_label(self, store_id: str) -> str:
         """Display name for a store id the store list doesn't know yet."""
         return f"Store {store_id}"

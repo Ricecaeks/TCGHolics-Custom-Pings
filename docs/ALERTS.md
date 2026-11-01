@@ -14,7 +14,7 @@ For every enabled retailer with stores (Farmers, JB Hi-Fi, Kmart) this creates t
 - **`#<retailer>-online`** for online alerts: new listings, online stock, price (`#farmers-online`, `#kmart-online`),
 - **`#<retailer>-instore`** for every store's stock in one place (`#farmers-instore`, `#kmart-instore`). A product that comes back at several stores in the same check is **one alert listing the stores**, not one per store.
 
-Each channel gets a webhook and a route saved in the database. Retailers without store stock (The Warehouse, Toyworld, card shops) get one channel each in an **Online Stores** category. Past Discord's 50-channels-per-category limit a category continues as `Retailers 2`.
+Each channel gets a webhook and a route saved in the database. Retailers without store stock (The Warehouse, card shops) get one channel each in an **Online Stores** category. Past Discord's 50-channels-per-category limit a category continues as `Retailers 2`.
 
 **You don't have to run it.** The bot checks every 10 minutes and builds channels for any newly enabled retailer, and recreates a routed channel that was deleted, posting what it did to the staff log channel. `/setup` is still there to preview, or to add a role ping. Turn this off with `AUTO_SETUP=false`.
 
@@ -96,7 +96,7 @@ Farmers' site says store stock was "updated at 8am this morning" (fixed text, no
 | JB Hi-Fi | ✅ | ✅ | ✅ | ✅ 27 stores | ✅ |
 | Farmers | ✅ (via Constructor) | ✅ | ✅ daily | ✅ daily, 53 stores (via the fetch chain) | — |
 | The Warehouse | ✅ | ✅ (incl. "in stores only") | ✅ | — | — |
-| Toyworld | ✅ | ✅ | ✅ | — | ✅ |
+| Toyworld | ✅ | ✅ | ✅ | ✅ 36 stores, with quantities | ✅ |
 | Shopify card shops | ✅ | ✅ | ✅ | — | ✅ |
 | Kmart | ✅ (via Constructor) | ✅ (most Pokémon is in-store only) | ✅ | per island: North / South | — |
 | Noel Leeming, … | coming | | | | |
