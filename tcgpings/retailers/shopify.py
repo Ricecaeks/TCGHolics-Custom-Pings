@@ -13,12 +13,15 @@ Shopify doesn't expose inventory counts publicly, so stock is IN/OUT only. SKU =
 from __future__ import annotations
 
 import asyncio
+import re
 from urllib.parse import urlparse
 
 from tcgpings.classify import franchise_of, matches_query
 from tcgpings.models import Level, Product, Stock, to_cents
 from tcgpings.net.http import FetchError
 from tcgpings.retailers.base import RetailerAdapter, register
+
+_CARD_TITLE = re.compile(r"\btcg\b|trading card|card game", re.I)
 
 
 @register
@@ -52,7 +55,21 @@ class ShopifyAdapter(RetailerAdapter):
                     found.setdefault(raw["handle"], self.parse_catalogue_product(raw))
                 if len(products) < 250:
                     break
+        # Shops whose feeds don't reach their card range set config.discovery_searches. Search returns
+        # non-card products too, so only titles that say they're cards are kept.
+        for query in self.config.get("discovery_searches") or []:
+            for raw in await self._suggest(query):
+                if _CARD_TITLE.search(raw.get("title", "")):
+                    found.setdefault(raw["handle"], self.parse_suggest_product(raw))
         return list(found.values())
+
+    async def _suggest(self, query: str) -> list[dict]:
+        data = await self.http.get_json(
+            self.policy,
+            f"{self.base}/search/suggest.json",
+            params={"q": query, "resources[type]": "product", "resources[limit]": "10"},
+        )
+        return ((data.get("resources") or {}).get("results") or {}).get("products") or []
 
     def cart_url(self, variant_id) -> str | None:
         """Shopify cart permalink: adds one unit and opens the cart."""
@@ -61,14 +78,10 @@ class ShopifyAdapter(RetailerAdapter):
     async def search(self, query: str) -> list[Product]:
         found: dict[str, Product] = {}
         try:
-            data = await self.http.get_json(
-                self.policy,
-                f"{self.base}/search/suggest.json",
-                params={"q": query, "resources[type]": "product", "resources[limit]": "10"},
-            )
+            suggested = await self._suggest(query)
         except FetchError:
-            data = {}  # some older themes disable predictive search; the catalogue scan still runs
-        for raw in ((data.get("resources") or {}).get("results") or {}).get("products") or []:
+            suggested = []  # some older themes disable predictive search; the catalogue scan still runs
+        for raw in suggested:
             if matches_query(" ".join([raw.get("title", ""), raw.get("type", ""), *_tags(raw)]), query):
                 found[raw["handle"]] = self.parse_suggest_product(raw)
 

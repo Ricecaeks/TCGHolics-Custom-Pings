@@ -21,7 +21,7 @@ FRANCHISE_NAMES = {
 }
 
 # Sleeves, binders, deck boxes...: never "sealed product", even when a deck/box word also matches.
-ACCESSORY = re.compile(r"sleeves|binder|deck\s*box|playmat|portfolio|toploader|pocket\s*pages|protector", re.I)
+ACCESSORY = re.compile(r"sleeves|binder(?!\s+collection)|deck\s*box|playmat|portfolio|toploader|pocket\s*pages|protector", re.I)
 
 # Checked in order: more specific types first.
 PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [

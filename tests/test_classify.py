@@ -107,3 +107,10 @@ def test_store_events_are_not_card_products(title):
     from tcgpings.classify import is_card_product
 
     assert not is_card_product(title)
+
+
+def test_binder_collection_is_sealed_but_a_binder_is_not():
+    from tcgpings.classify import is_sealed_product
+
+    assert is_sealed_product("Pokemon TCG: 30th Celebration Binder Collection")
+    assert not is_sealed_product("Pokemon TCG: Ultra Pro 9-Pocket Binder")

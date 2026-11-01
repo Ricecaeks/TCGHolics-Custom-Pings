@@ -147,7 +147,8 @@ kmart.co.nz is behind Akamai, but its search runs on Constructor.io (`ac.cnstrc.
 |---|---|---|
 | Product + **every store's stock** | the product page HTML embeds the JB product metafield JSON: `Price.DisplayPriceInc`, `Availability.OverallStatus` (`InStock`/`LimitedStock`/…), `ClickNCollectStatus`, and **`AvailabilityInStore.InStockStoreIds`** (e.g. `[21,23,28,…]`) | ✅ (3 of 3 requests OK) |
 | Price + online availability | `/products/<handle>.js` (Shopify standard) | ✅ |
-| Search / category | Algolia index `shopify_products_families` (public search key in the page), or the Shopify collection `/collections/trading-card-games` | not tested yet |
+| Search | `/search/suggest.json`, up to 10 results a query | ✅ |
+| Category | The store-wide `/products.json` rarely reaches cards, and collection feeds tested on 2026-11-02 were empty (`/collections/trading-card-games` is a 404). Discovery runs the `discovery_searches` config instead | — |
 | Store ID → name | Algolia index `shopify_store_locations` (used by `/pages/store-finder`), public search-only key approved 2026-10-29. `shopId` = the InStockStoreIds | ✅ |
 
 - **One request per product gives every store's stock.** It's the cheapest store-level retailer so far.
