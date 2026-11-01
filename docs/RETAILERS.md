@@ -46,6 +46,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - **Stores are identified by name only.** There's no store ID. The full list of 53 is in [`tcgpings/retailers/data/farmers_stores.json`](../tcgpings/retailers/data/farmers_stores.json). **Westgate is listed as "Northwest"** (NorthWest Shopping Centre, Massey). "Home by Farmers" homewares stores don't stock cards and aren't returned.
 - **In-store stock may refresh once a day (unproven).** The modal says "Stock updated at 8am this morning", but that's fixed text: it read the same at 3am on 2026-11-01. Online stock (JSON-LD) is live.
 - **Stock levels:** only "In Stock" and "Not In Stock" were seen. No counts.
+- **Unlisted products:** sold-out products can vanish from Constructor's search and category listing (the 30th Booster Bundle, seen 2026-11-01) while the store endpoint still answers for them. Their daily store checks carry on from the stored product, with no online stock reading until they're listed again.
 
 **Access:** the endpoints above go through the **fetch chain** (`tcgpings/net/chain.py`), in the order set by the retailer's `fetch` config (default `["browser", "scrapfly", "zyte"]`):
 1. our own Chrome (`net/browser.py`: Patchright driving Google Chrome, headed, Xvfb in Docker, persistent profile), free;

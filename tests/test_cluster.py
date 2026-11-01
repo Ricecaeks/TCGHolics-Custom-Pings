@@ -276,3 +276,28 @@ async def test_listing_store_stock_alerts_island_channel(pool, tmp_path):
         (20, "restock", "North Island")]
     assert rows[0]["payload"]["extra"]["note"] == "In-store only"
     assert not await pool.fetchval("SELECT count(*) FROM jobs WHERE kind = 'watch_sku'"), "no per-product calls"
+
+
+@register
+class FakeUnlistedRetailer(FakeStoreRetailer):
+    adapter_name = "_fake_unlisted"
+
+    async def fetch_products(self, skus):
+        return []
+
+
+async def test_store_checks_continue_for_a_product_the_retailer_stopped_listing(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "fake", "_fake_unlisted", "Fake Farmers")
+    worker = Worker(ctx)
+    await reconcile(ctx)
+    await run_due(worker, ctx)  # store sync
+    await queries.upsert_product(pool, Product("fake", "bundle", "Pokémon 30th Booster Bundle", "https://fake/bundle"))
+    await queries.add_discovery_job(pool, "sku:fake:bundle", "fake", "bundle", 60)
+    await queries.add_discovery_job(pool, "sku:fake:never-seen", "fake", "never-seen", 60)
+
+    await run_due(worker, ctx)
+
+    rows = await pool.fetch("SELECT sku, store_id FROM product_state ORDER BY store_id")
+    assert [(r["sku"], r["store_id"]) for r in rows] == [("bundle", "albany"), ("bundle", "westgate")]
+    assert ctx.stats.jobs_failed == 0
