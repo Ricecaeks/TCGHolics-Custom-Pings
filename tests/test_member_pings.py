@@ -70,10 +70,10 @@ def test_spotted_alert_is_labelled_a_member_report_and_names_the_reporter():
     assert fields["Note"] == "Member report, not confirmed by the retailer. limit \\*2\\*"
 
 
-def interaction(command_name, roles=(), trusted_role=7, parent=None):
+def interaction(command_name, roles=(), members_role=7, parent=None):
     user = SimpleNamespace(roles=[SimpleNamespace(id=r) for r in roles])
     command = SimpleNamespace(name=command_name, root_parent=SimpleNamespace(name=parent) if parent else None)
-    ctx = SimpleNamespace(settings=SimpleNamespace(trusted_role_id=trusted_role, staff_role_id=9))
+    ctx = SimpleNamespace(settings=SimpleNamespace(members_role_id=members_role, staff_role_id=9))
     return SimpleNamespace(user=user, command=command, client=SimpleNamespace(ctx=ctx))
 
 
@@ -82,5 +82,5 @@ def test_who_can_use_what():
     assert not allowed(interaction("spotted"))
     assert not allowed(interaction("spotted", roles=[1]))
     assert allowed(interaction("spotted", roles=[7]))
-    assert not allowed(interaction("spotted", roles=[0], trusted_role=0))  # no role configured
-    assert not allowed(interaction("status", roles=[7]))  # trusted members aren't staff
+    assert not allowed(interaction("spotted", roles=[0], members_role=0))  # no role configured
+    assert not allowed(interaction("status", roles=[7]))  # members aren't staff

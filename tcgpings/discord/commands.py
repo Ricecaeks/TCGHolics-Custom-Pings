@@ -1,4 +1,4 @@
-"""Slash commands. /ping is for every member, /spotted for trusted members; the rest are for staff (or server admins)."""
+"""Slash commands. /ping is for every member, /spotted for the members role; the rest are for staff (or server admins)."""
 
 from __future__ import annotations
 
@@ -43,8 +43,8 @@ def is_staff(interaction: discord.Interaction) -> bool:
     return bool(role_id) and any(r.id == role_id for r in member.roles)
 
 
-def is_trusted(interaction: discord.Interaction) -> bool:
-    role_id = _ctx(interaction).settings.trusted_role_id
+def has_members_role(interaction: discord.Interaction) -> bool:
+    role_id = _ctx(interaction).settings.members_role_id
     roles = getattr(interaction.user, "roles", [])
     return is_staff(interaction) or (bool(role_id) and any(r.id == role_id for r in roles))
 
@@ -54,7 +54,7 @@ def allowed(interaction: discord.Interaction) -> bool:
     if command and command.root_parent and command.root_parent.name == "ping":
         return True
     if command and command.name == "spotted":
-        return is_trusted(interaction)
+        return has_members_role(interaction)
     return is_staff(interaction)
 
 
