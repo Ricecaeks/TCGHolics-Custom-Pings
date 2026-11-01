@@ -14,13 +14,12 @@ What's built, what's next, and the add-ons parked until the core is finished.
 | Online + in-store channel per retailer, grouped in-store alerts, auto-setup of channels by the leader | done |
 | The Warehouse: listings, price, online stock | live. No per-store stock |
 | Toyworld, independent Shopify card shops: listings, price, online stock, add-to-cart | live |
-| Kmart: listings, price, online stock, North / South Island stock (Constructor.io) | live. No per-store stock |
+| Kmart: listings, price, online stock (Constructor.io), unit counts for all 28 stores | live |
 
 ## Next
 
 1. **Prove the Farmers fetch chain live.** Add the keys, then `probe farmers stock <sku> --store albany --set fetch='["scrapfly"]'` (and `'["zyte"]'`) to see which gets through and what it costs; swap their order if Zyte's plain-HTTP mode works.
    - Optional: an NZ residential proxy for the Chrome route (sticky 10–30 min sessions, user:pass auth, pay as you go; Decodo or ProxyEmpire). `tcgpings/net/browser.py` doesn't take a proxy yet.
-2. **Kmart per-store stock.** Kmart's "check stock nearby" goes to its own GraphQL gateway behind Akamai; recon pending. Island-level stock already works.
 3. **Noel Leeming** recon (same platform as The Warehouse).
 4. **Woolworths, Mighty Ape, Warehouse Stationery, Whitcoulls, Paper Plus** recon.
 5. **Shorter data retention**: 2 days for sent alerts and change history, 1 day for undeliverable alerts, and removal of products not seen for 14 days. Product state is kept while a product is listed, because that's what makes "new listing" and "restock" alerts work.

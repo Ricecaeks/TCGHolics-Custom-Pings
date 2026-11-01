@@ -1,40 +1,59 @@
-"""Kmart NZ (kmart.co.nz). Site search is Constructor.io; TCGHolics approved using Kmart's public
-client key. kmart.co.nz itself sits behind Akamai, so everything here goes to ac.cnstrc.com only.
-See docs/RETAILERS.md.
+"""Kmart NZ (kmart.co.nz). See docs/RETAILERS.md.
 
+Listings come from Constructor.io, the site's search (TCGHolics approved using Kmart's public client key):
 - Discovery:  /browse/group_id/<Trading Cards> sorted newest first (~85 products).
 - Search:     /search/<q>; a product's SKU finds it too.
 - Price:      data.price (NZD).
-- Stock:      data.stateOOS lists the islands where the product is out of stock,
-              e.g. {"SI": "6"}; an island that isn't listed has stock.
+- Online:     data.stateOOS lists the islands that are out of stock, e.g. {"SI": "6"}. These flags
+              include warehouse stock, so they say nothing about individual stores.
 - Fulfilment: data.FulfilmentChannel 3 = online and in store, 2 = in-store only (most Pokémon).
-              In-store-only products are never in stock online, so their availability is
-              the island-level flag alone.
 
-The two islands are this adapter's "stores" (#kmart-north-island, #kmart-south-island), and
-their stock comes with every listing, so watching them costs no extra requests. Kmart's
-per-store stock (its "check stock nearby") isn't covered.
+Store stock comes from the queries behind the product page's stock display, on Kmart's NZ gateway.
+No key or sign-in. A count for any postcode's five nearest stores, for many products at once, so a
+sweep asks one postcode at a time until every store has answered.
 """
 
 from __future__ import annotations
 
 import html
+import logging
 import re
+import time
 import uuid
 from urllib.parse import quote, urlparse
 
+from tcgpings.classify import is_sealed_product
 from tcgpings.models import Level, Product, Stock, Store, to_cents
+from tcgpings.net.http import FetchError
 from tcgpings.retailers.base import RetailerAdapter, register
+
+log = logging.getLogger(__name__)
 
 BASE = "https://www.kmart.co.nz"
 CONSTRUCTOR = "https://ac.cnstrc.com"
 CONSTRUCTOR_KEY = "key_EyiTrcbGw7IFH3wR"  # public client key embedded in kmart.co.nz pages
 TRADING_CARDS_GROUP = "c00f65271ffae599a4b675da63b2e92d"  # Toys > Toys by Category > Trading Cards
 IN_STORE_ONLY = 2
+ISLANDS = {"NI", "SI"}
 
-ISLANDS = {"NI": "North Island", "SI": "South Island"}
+GATEWAY = "https://api.kmart.co.nz/gateway/graphql"
+HEADERS = {"Origin": BASE, "Referer": f"{BASE}/"}
+STORES_QUERY = (
+    "query getNearestLocations($lat: String!, $lon: String!, $distance: String!, $limit: Int) { "
+    "nearestLocations(input: { lat: $lat, lon: $lon, distance: $distance, limit: $limit }) "
+    "{ locationId publicName state postcode } }"
+)
+STOCK_QUERY = (
+    "query getProductAvailability($input: ProductAvailabilityQueryInput!) { getProductAvailability(input: $input) "
+    "{ availability { CLICK_AND_COLLECT { keycode locations { fulfilment { isBuddyLocation locationId "
+    "stock { available } } } } } } }"
+)
+ALL_OF_NZ = {"lat": "-41.0", "lon": "174.0", "distance": "2000km", "limit": 100}
+BATCH = 100  # products per request; 85 is the most the category has had
+STORE_CHECK_SECONDS = 5 * 60
 
 _SKU_IN_URL = re.compile(r"(\d{7,9})/?$")
+_NZ_SUFFIX = re.compile(r"\s+nz$", re.I)
 
 
 def parse_constructor(data: dict, retailer_id: str = "kmart") -> list[Product]:
@@ -44,10 +63,8 @@ def parse_constructor(data: dict, retailer_id: str = "kmart") -> list[Product]:
         sku = str(d.get("variation_id") or str(d.get("id") or "").removeprefix("P_"))
         if not sku:
             continue
-        out = set((d.get("stateOOS") or {}).keys())
-        islands = {code: Stock(Level.OUT if code in out else Level.IN) for code in ISLANDS}
         in_store_only = d.get("FulfilmentChannel") == IN_STORE_ONLY
-        anywhere = any(s.level is Level.IN for s in islands.values())
+        anywhere = not ISLANDS <= set((d.get("stateOOS") or {}).keys())
         url = d.get("url") or f"/product/{sku}/"
         products.append(Product(
             retailer_id=retailer_id,
@@ -57,10 +74,35 @@ def parse_constructor(data: dict, retailer_id: str = "kmart") -> list[Product]:
             image=d.get("image_url"),
             price_cents=to_cents(d.get("price")),
             online=Stock(Level.IN if anywhere and not in_store_only else Level.OUT),
-            stores=islands,
             note="In-store only" if in_store_only else None,
         ))
     return products
+
+
+def parse_store_list(data: dict) -> list[dict]:
+    return [
+        {
+            "store_id": s["locationId"],
+            "name": _NZ_SUFFIX.sub("", s["publicName"].strip()),
+            "region": s.get("state") or None,
+            "postcode": (s.get("postcode") or "").zfill(4),
+        }
+        for s in (data.get("data") or {}).get("nearestLocations") or []
+    ]
+
+
+def parse_store_counts(data: dict) -> dict[str, dict[str, int]]:
+    """SKU -> store -> units. Stores answering for another store's stock are left out."""
+    availability = ((data.get("data") or {}).get("getProductAvailability") or {}).get("availability") or {}
+    counts: dict[str, dict[str, int]] = {}
+    for row in availability.get("CLICK_AND_COLLECT") or []:
+        stores = counts.setdefault(row["keycode"], {})
+        for location in row.get("locations") or []:
+            fulfilment = location.get("fulfilment") or {}
+            if fulfilment.get("isBuddyLocation") or not fulfilment.get("locationId"):
+                continue
+            stores[fulfilment["locationId"]] = max((fulfilment.get("stock") or {}).get("available") or 0, 0)
+    return counts
 
 
 @register
@@ -78,16 +120,64 @@ class KmartAdapter(RetailerAdapter):
         super().__init__(retailer, http)
         self._cio = {"key": self.config.get("constructor_key", CONSTRUCTOR_KEY), "c": "ciojs-client-2.77.1",
                      "i": str(uuid.uuid4()), "s": "1"}
+        self._stores: list[dict] = []
+        self._next_store_check = 0.0
 
     async def _constructor(self, path: str, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
         return parse_constructor(data, self.retailer_id)
 
+    async def _gateway(self, operation: str, query: str, variables: dict) -> dict:
+        resp = await self.http.request(
+            self.policy, "POST", GATEWAY, headers=HEADERS,
+            json={"operationName": operation, "query": query, "variables": variables},
+        )
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise FetchError(f"POST {GATEWAY}: response was not JSON") from exc
+
     async def discover(self) -> list[Product]:
-        return await self._constructor(
+        products = await self._constructor(
             f"/browse/group_id/{self.config.get('group_id', TRADING_CARDS_GROUP)}",
             sort_by="numberOfDaysSinceStartDate", sort_order="ascending", num_results_per_page="200",
         )
+        if time.monotonic() >= self._next_store_check:
+            try:
+                stock = await self._store_stock([p.sku for p in products if is_sealed_product(p.title)])
+            except FetchError as exc:  # the listings are still good; try the stores again next run
+                log.warning("kmart: store stock unavailable: %s", exc)
+            else:
+                self._next_store_check = time.monotonic() + STORE_CHECK_SECONDS
+                for product in products:
+                    product.stores = stock.get(product.sku)
+        return products
+
+    async def _store_stock(self, skus: list[str]) -> dict[str, dict[str, Stock]]:
+        """Every store's stock. A store that never answers is left out, not called empty."""
+        stores = self._stores or await self._load_stores()
+        stock: dict[str, dict[str, Stock]] = {}
+        for start in range(0, len(skus), BATCH):
+            products = [{"keycode": sku, "quantity": 1, "isNationalInventory": False, "isClickAndCollectOnly": True}
+                        for sku in skus[start:start + BATCH]]
+            answered: set[str] = set()
+            for store in stores:
+                if store["store_id"] in answered:
+                    continue
+                data = await self._gateway("getProductAvailability", STOCK_QUERY, {"input": {
+                    "country": "NZ", "postcode": store["postcode"], "products": products,
+                    "fulfilmentMethods": ["CLICK_AND_COLLECT"], "limit": 5,
+                }})
+                for sku, counts in parse_store_counts(data).items():
+                    answered.update(counts)
+                    stock.setdefault(sku, {}).update(
+                        {sid: Stock(Level.IN if qty else Level.OUT, qty) for sid, qty in counts.items()}
+                    )
+        return stock
+
+    async def _load_stores(self) -> list[dict]:
+        self._stores = parse_store_list(await self._gateway("getNearestLocations", STORES_QUERY, ALL_OF_NZ))
+        return self._stores
 
     async def search(self, query: str) -> list[Product]:
         return await self._constructor(f"/search/{quote(query)}", num_results_per_page="100")
@@ -100,10 +190,11 @@ class KmartAdapter(RetailerAdapter):
         return products
 
     async def list_stores(self) -> list[Store]:
-        return [Store(self.retailer_id, code, name) for code, name in ISLANDS.items()]
+        stores = await self._load_stores()
+        return [Store(self.retailer_id, s["store_id"], s["name"], s["region"]) for s in stores]
 
     def store_label(self, store_id: str) -> str:
-        return ISLANDS.get(store_id, store_id)
+        return next((s["name"] for s in self._stores if s["store_id"] == store_id), f"Store {store_id}")
 
     def parse_ref(self, ref: str) -> str:
         ref = ref.strip()

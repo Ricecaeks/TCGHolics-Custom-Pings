@@ -98,5 +98,5 @@ Farmers' site says store stock was "updated at 8am this morning" (fixed text, no
 | The Warehouse | ✅ | ✅ (incl. "in stores only") | ✅ | — | — |
 | Toyworld | ✅ | ✅ | ✅ | ✅ 36 stores, in / low / out | ✅ |
 | Shopify card shops | ✅ | ✅ | ✅ | — | ✅ |
-| Kmart | ✅ (via Constructor) | ✅ (most Pokémon is in-store only) | ✅ | per island: North / South | — |
+| Kmart | ✅ (via Constructor) | ✅ (most Pokémon is in-store only) | ✅ | ✅ 28 stores, with unit counts | — |
 | Noel Leeming, … | coming | | | | |
