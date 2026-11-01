@@ -3,7 +3,9 @@
 New listings, online stock and price come from the "Trading Cards & Accessories" category
 sorted newest first (`/search?cgid=...&srule=newest`, 32 tiles a page). Each tile carries
 `data-gtm-product` JSON (name, id, price, marketplace flag) and
-`data-stock-status` (IN_STOCK, FIND_IN_STORE = in stores but not online, ...).
+`data-stock-status` (IN_STOCK, FIND_IN_STORE = in stores but not online, ...). "Newest" isn't strictly
+newest (hot products were on page 2), and products don't reach every listing together, so discovery
+also reads a search, and logs which listing shows each product first.
 
 Not covered:
   - Per-store stock: the store-availability call needs a signed per-product token, and hot
@@ -17,15 +19,21 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import re
 from urllib.parse import quote
 
 from tcgpings.models import Level, Product, Stock, to_cents
+from tcgpings.net.http import FetchError
 from tcgpings.retailers.base import RetailerAdapter, register
+
+log = logging.getLogger(__name__)
 
 BASE = "https://www.thewarehouse.co.nz"
 TRADING_CARDS = "toysbaby-toys-collectibletoys-tradingcardsaccs"
 PAGE_SIZE = 32
+DISCOVERY_SEARCHES = ("pokemon tcg",)
+IN_STORES_ONLY = "In stores, not online"
 
 STOCK_STATUS = {
     "IN_STOCK": Level.IN,
@@ -77,6 +85,7 @@ def parse_tiles(page: str, retailer_id: str = "warehouse", marketplace: bool = F
             continue
         href, img = _HREF.search(tile), _IMG.search(tile)
         status, orderable = _STATUS.search(tile), _ORDERABLE.search(tile)
+        stock_status = status and status.group(1)
         products.append(Product(
             retailer_id=retailer_id,
             sku=pid.group(1),
@@ -84,7 +93,8 @@ def parse_tiles(page: str, retailer_id: str = "warehouse", marketplace: bool = F
             url=BASE + html.unescape(href.group(1)) if href else f"{BASE}/p/x/{pid.group(1)}.html",
             image=html.unescape(img.group(1)) if img else None,
             price_cents=to_cents(data.get("price")),
-            online=Stock(_tile_level(status and status.group(1), orderable and orderable.group(1))),
+            online=Stock(_tile_level(stock_status, orderable and orderable.group(1))),
+            note=IN_STORES_ONLY if stock_status == "FIND_IN_STORE" else None,
         ))
     return products
 
@@ -121,11 +131,15 @@ def parse_product(page: str, sku: str, retailer_id: str = "warehouse") -> Produc
 class WarehouseAdapter(RetailerAdapter):
     adapter_name = "warehouse"
     supports_discovery = True
-    default_discover_interval = 180
+    default_discover_interval = 120
     default_sku_interval = 5 * 60
     default_search_interval = 10 * 60
     default_requests_per_minute = 12
     default_retailers = [("warehouse", "The Warehouse", {"categories": [TRADING_CARDS], "discover_pages": 2}, 0xE2231A)]
+
+    def __init__(self, retailer, http) -> None:
+        super().__init__(retailer, http)
+        self._seen: dict[str, set[str]] = {}
 
     def _listing_url(self, params: str, start: int = 0) -> str:
         return f"{BASE}/search?{params}&srule=newest&start={start}&sz={PAGE_SIZE}"
@@ -145,9 +159,21 @@ class WarehouseAdapter(RetailerAdapter):
         pages = int(self.config.get("discover_pages", 2))
         found: dict[str, Product] = {}
         for cgid in self.config.get("categories") or [TRADING_CARDS]:
-            for p in await self._listing(f"cgid={quote(cgid)}", pages):
-                found.setdefault(p.sku, p)
+            self._collect(found, f"category {cgid}", await self._listing(f"cgid={quote(cgid)}", pages))
+        for query in DISCOVERY_SEARCHES:
+            try:
+                self._collect(found, f"search {query}", await self._listing(f"q={quote(query)}", 1))
+            except FetchError as exc:  # the categories already gave a good result
+                log.info("warehouse: discovery search %r failed: %s", query, exc)
         return list(found.values())
+
+    def _collect(self, found: dict[str, Product], source: str, products: list[Product]) -> None:
+        seen = self._seen.get(source)
+        for p in products:
+            found.setdefault(p.sku, p)
+            if seen is not None and p.sku not in seen:
+                log.info("warehouse: %s first shows %s (%s)", source, p.sku, p.title)
+        self._seen[source] = (seen or set()) | {p.sku for p in products}
 
     async def search(self, query: str) -> list[Product]:
         return await self._listing(f"q={quote(query)}", 1)
