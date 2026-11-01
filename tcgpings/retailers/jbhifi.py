@@ -27,6 +27,9 @@ _IN_STOCK_IDS = re.compile(r'InStockStoreIds[\\"]*\s*:\s*\[([\d,\s]*)\]')
 ALGOLIA_APP = "VHBKEAHERO"
 ALGOLIA_KEY = "f65c581554c47bd2644975c00b63910a"  # public search-only key used by jbhifi.co.nz/pages/store-finder
 STORE_INDEX = "shopify_store_locations"
+# The catalogue feed is store-wide and its collection feeds are empty, so cards are found by search (10 a query).
+DISCOVERY_SEARCHES = ["pokemon tcg", "pokemon trading card", "pokemon booster", "one piece card game", "lorcana tcg",
+                      "yugioh trading card", "magic the gathering tcg", "riftbound tcg"]
 
 # Entries in the store index that aren't shops customers can walk into.
 _NOT_A_SHOP = re.compile(
@@ -70,10 +73,11 @@ class JBHiFiAdapter(ShopifyAdapter):
     supports_store_stock = True
     track_all_discovered = True  # a small sealed range, and any member can ping on any of it
     store_stock_interval = 10 * 60   # product pages are ~600 KB; store stock doesn't move by the second
-    default_sku_interval = 3 * 60
+    default_sku_interval = 10 * 60  # online stock also comes from discovery every 3 minutes
     default_requests_per_minute = 20
     default_retailers = [
-        ("jbhifi", "JB Hi-Fi", {"domain": "www.jbhifi.co.nz", "catalogue_pages": 1, "discover_pages": 1}, 0xFFE600)
+        ("jbhifi", "JB Hi-Fi", {"domain": "www.jbhifi.co.nz", "catalogue_pages": 1, "discover_pages": 1,
+                    "discovery_searches": DISCOVERY_SEARCHES}, 0xFFE600)
     ]
 
     def __init__(self, retailer, http) -> None:

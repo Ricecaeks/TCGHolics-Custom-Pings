@@ -133,3 +133,17 @@ async def test_discover_reads_only_configured_collections():
     a = ToyworldAdapter({**ROW, "id": rid, "adapter": "toyworld", "name": name, "config": config}, FakeHttp(routes))
     assert len(await a.discover()) == 3  # same products in both collections, counted once
     assert [c[0] for c in a.http.calls] == list(routes)
+
+
+async def test_discovery_searches_keep_only_card_titles():
+    from tcgpings.retailers.jbhifi import JBHiFiAdapter
+
+    rid, name, config, _ = JBHiFiAdapter.default_retailers[0]
+    assert "pokemon tcg" in config["discovery_searches"]
+    suggest = {"resources": {"results": {"products": [
+        {"handle": "etb", "title": "Pokémon TCG: Mega Greninja ex League Battle Deck", "available": True, "price": "45.00"},
+        {"handle": "lamp", "title": "Teknofun Pokémon Eevee 30cm LED Lamp", "available": True, "price": "60.00"},
+    ]}}}
+    routes = {"https://www.jbhifi.co.nz/products.json": {"products": []}, "https://www.jbhifi.co.nz/search/suggest.json": suggest}
+    a = JBHiFiAdapter({**ROW, "id": rid, "adapter": "jbhifi", "name": name, "config": config}, FakeHttp(routes))
+    assert [p.sku for p in await a.discover()] == ["etb"]
