@@ -12,7 +12,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Kmart NZ | `kmart` | per island (North / South), not per store | **live via Constructor.io** (discovery of Trading Cards newest-first, search, price, online stock, in/out per island). No add-to-cart link |
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
-| Toyworld | `toyworld` (Shopify) | yes: quantities, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
+| Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
 | Whitcoulls | `whitcoulls` | to confirm | recon pending |
 | Paper Plus | `paperplus` | to confirm | recon pending |
@@ -105,9 +105,9 @@ Shopify (`www.toyworld.co.nz`), so the generic adapter does everything, includin
 | Purpose | Request | Response |
 |---|---|---|
 | Store list | `POST /stores/getStoresForWidget` with `site=10044&widget=51` | `response.stores_list`: `code`, `name`, `region_name` (36 stores) |
-| Store stock | `POST /stores/getStoresStock` with `pid=<barcode>&storeids=<codes>` plus the widget's other fields | `response[]`: `code`, `stock` (a quantity), `recordUpdatedAt`. About 360 KB, under a second |
+| Store stock | `POST /stores/getStoresStock` with `pid=<barcode>&storeids=<codes>` plus the widget's other fields | `response[]`: `code`, `threshold.threshold_type_by` (`in-stock`, `low-stock`, `out-of-stock`), `recordUpdatedAt`. `stock` is only 0 or 1, not a count. About 360 KB, under a second |
 
-- The barcode comes from `/products/<handle>.js` (`variants[].barcode`). "Assorted" products have several, and their quantities are added together.
+- The barcode comes from `/products/<handle>.js` (`variants[].barcode`). "Assorted" products have several, and each store takes its best level across them.
 - Every sealed product discovery finds gets a store check, at most every 15 minutes.
 - **Not known yet:** how often the data updates (all stores showed one batch time), and how to look up in-store products Toyworld doesn't list online. These need a barcode from elsewhere.
 
