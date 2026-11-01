@@ -1,4 +1,4 @@
-"""Slash commands. Every command is restricted to the staff role (or server admins)."""
+"""Slash commands. /ping is for every member; the rest are restricted to the staff role (or server admins)."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 WEBHOOK_NAME = "TCGHolics Pings"
 FRANCHISE_CHOICES = [app_commands.Choice(name=v, value=k) for k, v in FRANCHISE_NAMES.items()]
 EVENT_NAMES = {e.value for e in EventType}
+MAX_PINGS_PER_MEMBER = 25
+PING_EVENTS = [EventType.NEW_PRODUCT.value, EventType.RESTOCK.value]
 
 
 def _ctx(interaction: discord.Interaction) -> Context:
@@ -296,6 +298,21 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         ctx.routes.invalidate()
         await _reply(interaction, f"Removed route #{route_id}.")
 
+    @app_commands.command(name="pings", description="Send member keyword pings (/ping) to this channel")
+    async def pings(self, interaction: discord.Interaction) -> None:
+        ctx = _ctx(interaction)
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            return await _reply(interaction, "Run this in a text channel.")
+        if any(r["member_pings"] and r["channel_id"] == channel.id for r in await queries.list_routes(ctx.pool)):
+            return await _reply(interaction, f"{channel.mention} already gets member pings.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        hook = await _webhook_for(channel, interaction.client.user)
+        route_id = await queries.add_route(ctx.pool, channel.id, hook.url, event_types=PING_EVENTS, member_pings=True)
+        ctx.routes.invalidate()
+        await _reply(interaction, f"Route **#{route_id}**: new listings and restocks matching a member's `/ping` "
+                                  f"keywords go to {channel.mention}, tagging them.")
+
     @app_commands.command(name="autocreate", description="Create one retailer's channels (same as /setup retailer:<x>)")
     @app_commands.autocomplete(retailer=retailer_autocomplete)
     async def autocreate(self, interaction: discord.Interaction, retailer: str, role: discord.Role | None = None) -> None:
@@ -364,6 +381,51 @@ async def auto_setup(ctx: Context, guild: discord.Guild, me: discord.abc.User) -
         return await setup.apply_layout(guild, plans, routes, lambda ch: _webhook_for(ch, me), add_route)
     finally:
         ctx.routes.invalidate()
+
+
+# --- /ping -----------------------------------------------------------------------------
+
+
+def ping_keywords_problem(keywords: str) -> str | None:
+    """Why these keywords can't be saved. They must name something, or every alert would tag the member."""
+    if len(keywords) > 100:
+        return "Keep keywords under 100 characters."
+    groups = KeywordFilter.parse(keywords).groups
+    if not groups or any(len(word) < 2 for group in groups for word in group):
+        return "Add at least one word to match, of 2 or more letters. e.g. `30th booster bundle, -sleeves`"
+    return None
+
+
+@app_commands.guild_only()
+class PingGroup(app_commands.Group, name="ping", description="Get tagged when stock matches your keywords"):
+    @app_commands.command(name="add", description="Tag me when a new listing or restock matches these keywords")
+    @app_commands.describe(keywords="Product, game, retailer or store. e.g. 30th albany, or booster bundle -sleeves")
+    async def add(self, interaction: discord.Interaction, keywords: str) -> None:
+        ctx = _ctx(interaction)
+        keywords = " ".join(keywords.split())
+        if problem := ping_keywords_problem(keywords):
+            return await _reply(interaction, problem)
+        if len(await queries.list_member_pings(ctx.pool, interaction.user.id)) >= MAX_PINGS_PER_MEMBER:
+            return await _reply(interaction, f"You're at the limit of {MAX_PINGS_PER_MEMBER}. Remove one with `/ping remove`.")
+        ping_id = await queries.add_member_ping(ctx.pool, interaction.user.id, keywords)
+        if ping_id is None:
+            return await _reply(interaction, "You already have those keywords.")
+        ctx.routes.invalidate()
+        await _reply(interaction, f"**#{ping_id}** You'll be tagged on: {KeywordFilter.parse(keywords).describe()}")
+
+    @app_commands.command(name="list", description="Show my keywords")
+    async def list(self, interaction: discord.Interaction) -> None:
+        rows = await queries.list_member_pings(_ctx(interaction).pool, interaction.user.id)
+        lines = [f"**#{r['id']}** {discord.utils.escape_markdown(r['keywords'])}" for r in rows]
+        await _reply(interaction, "\n".join(lines) or "No keywords yet. Add some with `/ping add`.")
+
+    @app_commands.command(name="remove", description="Remove one of my keywords by its number from /ping list")
+    async def remove(self, interaction: discord.Interaction, ping_id: int) -> None:
+        ctx = _ctx(interaction)
+        if not await queries.remove_member_ping(ctx.pool, interaction.user.id, ping_id):
+            return await _reply(interaction, f"You don't have a #{ping_id}. Check `/ping list`.")
+        ctx.routes.invalidate()
+        await _reply(interaction, f"Removed #{ping_id}.")
 
 
 # --- /retailer -------------------------------------------------------------------------
@@ -517,13 +579,14 @@ async def test_alert_cmd(interaction: discord.Interaction) -> None:
 
 
 def register(tree: app_commands.CommandTree) -> None:
-    for group in (WatchGroup(), RouteGroup(), RetailerGroup()):
+    for group in (WatchGroup(), RouteGroup(), RetailerGroup(), PingGroup()):
         tree.add_command(group)
     for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd):
         tree.add_command(cmd)
 
     async def check(interaction: discord.Interaction) -> bool:
-        if is_staff(interaction):
+        command = interaction.command
+        if is_staff(interaction) or (command and command.root_parent and command.root_parent.name == "ping"):
             return True
         await _reply(interaction, "Only TCGHolics staff can use these commands.")
         return False

@@ -404,14 +404,38 @@ async def add_route(
     event_types: list[str] | None = None,
     role_id: int | None = None,
     keywords: str | None = None,
+    member_pings: bool = False,
 ) -> int:
     return await db.fetchval(
         """
-        INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+        INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords,
+                            member_pings)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id
         """,
-        retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords or None,
+        retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords or None, member_pings,
     )
+
+
+async def add_member_ping(db: DB, user_id: int, keywords: str) -> int | None:
+    """Returns None when this member already has these keywords."""
+    return await db.fetchval(
+        """
+        INSERT INTO member_pings (user_id, keywords) VALUES ($1, $2)
+        ON CONFLICT (user_id, lower(keywords)) DO NOTHING RETURNING id
+        """,
+        user_id, keywords,
+    )
+
+
+async def list_member_pings(db: DB, user_id: int | None = None) -> list[asyncpg.Record]:
+    return await db.fetch(
+        "SELECT * FROM member_pings WHERE $1::bigint IS NULL OR user_id = $1 ORDER BY id", user_id
+    )
+
+
+async def remove_member_ping(db: DB, user_id: int, ping_id: int) -> bool:
+    result = await db.execute("DELETE FROM member_pings WHERE id = $1 AND user_id = $2", ping_id, user_id)
+    return result.endswith(" 1")
 
 
 async def set_route_keywords(db: DB, route_id: int, keywords: str | None) -> bool:

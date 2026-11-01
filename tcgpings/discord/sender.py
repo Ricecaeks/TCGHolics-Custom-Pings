@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 POLL_SECONDS = 2
 BATCH = 10
+MAX_CONTENT = 1900  # Discord's limit is 2000
 
 
 async def sender_loop(ctx: Context) -> None:
@@ -57,18 +58,58 @@ async def send_batch(ctx: Context, session: aiohttp.ClientSession) -> int:
     return len(rows)
 
 
+def ping_messages(pings: list[dict] | None) -> list[tuple[str, list[int]]]:
+    """Each matched keyword's line tagging its members, split to fit Discord's message limit.
+
+    Returns (text, users tagged in that text). Keywords are members' own text, so they can't mention anyone.
+    """
+    messages: list[tuple[str, list[int]]] = []
+    text, users = "", []
+
+    def flush() -> None:
+        nonlocal text, users
+        if text:
+            messages.append((text, users))
+        text, users = "", []
+
+    for ping in pings or []:
+        keywords = discord.utils.escape_markdown(ping["keywords"]).replace("@", "@​")
+        line = f"Keyword Matched: **{keywords}** -"
+        if len(text) + len(line) + 30 > MAX_CONTENT:
+            flush()
+        text += ("\n" if text else "") + line
+        for user_id in ping["users"]:
+            mention = f" <@{user_id}>"
+            if len(text) + len(mention) > MAX_CONTENT:
+                flush()
+                text = line
+            text += mention
+            users.append(user_id)
+    flush()
+    return messages
+
+
 async def deliver(
     ctx: Context, session: aiohttp.ClientSession, event: Event, webhook_url: str, role_id: int | None
 ) -> None:
     embed = build_embed(event)
-    content = f"<@&{role_id}>" if role_id else None
+    role = f"<@&{role_id}>" if role_id else None
+    messages = ping_messages(event.extra.get("pings"))
+    first, tagged = messages[0] if messages else (None, [])
+    content = "\n".join(filter(None, [role, first])) or None
     if ctx.settings.dry_run:
         fields = ", ".join(f"{f.name}={f.value}" for f in embed.fields)
         log.info("[dry-run] %s | %s | %s | %s %s", embed.author.name, embed.title, embed.description, fields, content or "")
         return
     webhook = discord.Webhook.from_url(webhook_url, session=session)
-    await webhook.send(
-        content=content,
-        embed=embed,
-        allowed_mentions=discord.AllowedMentions(roles=True, users=False, everyone=False),
+    await webhook.send(content=content, embed=embed, allowed_mentions=_mentions(tagged, role_id))
+    for text, users in messages[1:]:
+        await webhook.send(content=text, allowed_mentions=_mentions(users))
+
+
+def _mentions(users: list[int], role_id: int | None = None) -> discord.AllowedMentions:
+    return discord.AllowedMentions(
+        everyone=False,
+        roles=[discord.Object(role_id)] if role_id else False,
+        users=[discord.Object(u) for u in users] or False,
     )

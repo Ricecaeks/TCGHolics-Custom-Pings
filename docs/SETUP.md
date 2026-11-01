@@ -17,6 +17,8 @@ Do steps 1–3 once. Do step 4 on every NUC.
    - the staff role allowed to manage the bot → `STAFF_ROLE_ID` (server admins always can)
    - optionally, a private `#bot-health` channel → `LOG_CHANNEL_ID`
 
+On the GitHub deploy, `DISCORD_TOKEN`, `GUILD_ID` and `STAFF_ROLE_ID` are repository secrets. Set `AUTO_SETUP=false` in `.env` first if you don't want the bot to create retailer channels by itself.
+
 ## 2. Supabase (database)
 
 1. Go to <https://supabase.com> → **New project**. Pick the **Free** plan and the **Sydney (ap-southeast-2)** region, which is closest to NZ. Save the database password.
