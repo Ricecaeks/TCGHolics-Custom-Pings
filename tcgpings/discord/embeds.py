@@ -16,6 +16,7 @@ TITLES = {
     EventType.OUT_OF_STOCK: "❌ Out of stock",
     EventType.QTY_CHANGE: "📦 Stock change",
     EventType.PRICE_CHANGE: "💲 Price change",
+    EventType.SPOTTED: "👀 Spotted in store",
 }
 
 COLORS = {
@@ -24,6 +25,7 @@ COLORS = {
     EventType.OUT_OF_STOCK: 0xEF4444,
     EventType.QTY_CHANGE: 0xF59E0B,
     EventType.PRICE_CHANGE: 0xA855F7,
+    EventType.SPOTTED: 0x06B6D4,
 }
 
 
@@ -37,11 +39,12 @@ def build_embed(event: Event) -> discord.Embed:
     retailer = event.extra.get("retailer_name") or event.retailer_id
     where = event.store_name or "Online"
     links = [f"[🛒 **Add to cart**]({event.atc_url})"] if event.atc_url else []
-    links.append(f"[View product]({event.url})")
+    if event.url:
+        links.append(f"[View product]({event.url})")
     embed = discord.Embed(
         title=event.title[:256],
-        url=event.atc_url or event.url,
-        description=" · ".join(links),
+        url=event.atc_url or event.url or None,
+        description=" · ".join(links) or None,
         color=COLORS[event.type],
         timestamp=datetime.now(timezone.utc),
     )
@@ -49,7 +52,9 @@ def build_embed(event: Event) -> discord.Embed:
     if event.image:
         embed.set_thumbnail(url=event.image)
 
-    if event.type is EventType.NEW_PRODUCT:
+    if event.type is EventType.SPOTTED:
+        embed.add_field(name="Reported by", value=f"<@{event.extra['reported_by']}>")
+    elif event.type is EventType.NEW_PRODUCT:
         embed.add_field(name="Stock", value=_stock(event.new_level, event.new_qty))
     else:
         old, new = _stock(event.old_level, event.old_qty), _stock(event.new_level, event.new_qty)

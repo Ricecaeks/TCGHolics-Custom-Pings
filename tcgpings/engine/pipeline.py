@@ -70,7 +70,13 @@ class Pipeline:
                 await self._enqueue(conn, retailer, events)
         return events
 
-    async def _enqueue(self, conn: asyncpg.Connection, retailer: Any, events: list[Event]) -> None:
+    async def report(self, retailer: Any, event: Event) -> int:
+        """Queue an event nobody observed through a stock check. Returns how many alerts were queued."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            return await self._enqueue(conn, retailer, [event])
+
+    async def _enqueue(self, conn: asyncpg.Connection, retailer: Any, events: list[Event]) -> int:
+        queued = 0
         routes = await self.routes.get()
         bucket = int(time.time() // self.cooldown)
         per_route: dict[int, tuple[Any, list[Event]]] = {}
@@ -94,7 +100,8 @@ class Pipeline:
                     if not payload["extra"]["pings"]:
                         continue
                 key = f"{event.dedupe_key(bucket)}#{route_id}"
-                await queries.enqueue_alert(conn, key, route_id, payload)
+                queued += await queries.enqueue_alert(conn, key, route_id, payload)
+        return queued
 
 
 def merge_store_events(events: list[Event]) -> list[Event]:

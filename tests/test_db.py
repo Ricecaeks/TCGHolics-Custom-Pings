@@ -273,3 +273,22 @@ async def test_ping_channel_stays_quiet_when_nobody_matches(pool):
     await pipe.record(RETAILER, product(Level.OUT))
     await pipe.record(RETAILER, product(Level.IN))
     assert await outbox(pool) == []
+
+
+async def test_spotted_report_tags_matching_members_and_posts_once(pool):
+    from tcgpings.discord.commands import PING_EVENTS, spotted_event
+
+    await seed(pool)
+    await queries.add_route(pool, 1, "https://discord.test/beta")
+    await queries.add_route(pool, 2, "https://discord.test/pings", event_types=PING_EVENTS, member_pings=True)
+    await queries.add_member_ping(pool, 1, "30th westgate")
+    await queries.add_member_ping(pool, 2, "30th albany")
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    event = spotted_event("Pokemon 30th Booster Bundle", "warehouse", "The Warehouse", "Westgate", 42, None)
+    row = {"id": "warehouse", "name": "The Warehouse", "color": None}
+    assert await pipe.report(row, event) == 2
+    rows = await outbox(pool)
+    ping = next(r for r in rows if r["route_id"] == 2)
+    assert ping["payload"]["extra"]["pings"] == [{"keywords": "30th westgate", "users": [1]}]
+    assert await pipe.report(row, event) == 0  # a second report of the same thing
+    assert await queries.list_member_pings(pool, 1)
