@@ -9,7 +9,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | The Warehouse | `warehouse` | not used (see below) | **live, online only** (discovery of the Trading Cards category newest-first, search, price, online stock incl. "in stores only"). No add-to-cart link (Turnstile) |
 | Noel Leeming | `noelleeming` | yes (expected) | recon pending |
 | Warehouse Stationery | `warehousestationery` | yes (expected) | recon pending (Cloudflare challenge) |
-| Kmart NZ | `kmart` | per island (North / South), not per store | **live via Constructor.io** (discovery of Trading Cards newest-first, search, price, online stock, in/out per island). No add-to-cart link |
+| Kmart NZ | `kmart` | yes: unit counts, 28 stores | **live** (Constructor.io for discovery of Trading Cards newest-first, search, price, online stock; Kmart's gateway for per-store counts). No add-to-cart link |
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
@@ -120,14 +120,22 @@ kmart.co.nz is behind Akamai, but its search runs on Constructor.io (`ac.cnstrc.
 - Per result: `data.variation_id` (the product number in the URL), `value` (title), `data.url`, `data.image_url`, `data.price` (NZD).
 - **`data.stateOOS`** lists the islands where the product is out of stock, e.g. `{"SI": "6"}`. An island that isn't listed has stock. The site's "Out of Stock Online" label matches products listed for both islands.
 - **`data.FulfilmentChannel`**: `3` = online and in store (the product page offers "Add to bag" and home delivery); `2` = **in-store only**, which covers most Pokémon. Checked on product pages.
-- In the adapter:
-  - The islands are the "stores" `NI` and `SI`; their alerts go to `#kmart-instore` (online ones to `#kmart-online`).
-  - Island stock comes with every listing (`Product.stores`), so it costs no extra requests.
-  - Online stock is IN when the product ships online and at least one island has it.
-  - In-store-only products are always OUT online and carry an "In-store only" note on alerts. Their restocks show up in `#kmart-instore`.
-- Not covered:
-  - **Per-store stock.** The product page's "check stock nearby" goes to Kmart's own GraphQL gateway behind Akamai, and showed "No nearby stores available" during recon.
-  - **The exact meaning of an island flag.** It is presumably "some store or the online warehouse on that island has stock"; this hasn't been checked against individual stores.
+- Island flags include warehouse stock: on 2026-11-01 a product flagged in stock showed 17 in a home-delivery pool and 0 in stores. So they only decide online stock (IN when it ships online and an island has it).
+- In-store-only products are always OUT online and carry an "In-store only" note on alerts. Their restocks show up in `#kmart-instore`.
+
+### Kmart store stock (recon 2026-11-01)
+
+`POST https://api.kmart.co.nz/gateway/graphql` with plain HTTP, using the queries in the product page's own scripts. No key or sign-in.
+
+| Query | Input | Returns |
+|---|---|---|
+| `getNearestLocations` | `lat`, `lon`, `distance: "2000km"`, `limit` | every store: `locationId` (e.g. `8229` Sylvia Park), `publicName`, `state`, `postcode` |
+| `getProductAvailability` | `country`, `postcode`, `products: [{keycode, ...}]`, `fulfilmentMethods: ["CLICK_AND_COLLECT"]` | per product, the postcode's 5 nearest stores with `fulfilment.stock.available`, a **unit count** |
+
+- **A sweep:** one product batch per postcode, skipping stores already answered. 8 postcodes covered all 28 stores for 54 products in one test, every 5 minutes in the bot.
+- **Checked:** Surging Sparks showed 10 at Sylvia Park while the site said in stock there, and Hot Wheels showed 0 where the site said out of stock. A fake product code showed 0 everywhere.
+- **Not used:** `getFindInStore`, which the "check stock nearby" window calls. It returns `High`, `Medium` or `Low`, and a fake product code also gets `Low`. On kmart.co.nz that window sends it to `api.kmart.com.au`, which returned 429 in testing and made the window say "No nearby stores available".
+- **Not explained:** some very large counts (Rotorua showed 286 of one product). Counts are what the system holds, and stock may not be on the shelf yet.
 
 ## JB Hi-Fi NZ (recon 2026-10-29)
 
