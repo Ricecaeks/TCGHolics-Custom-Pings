@@ -67,6 +67,7 @@ class EventType(StrEnum):
     OUT_OF_STOCK = "out_of_stock"
     QTY_CHANGE = "qty_change"
     PRICE_CHANGE = "price_change"
+    SPOTTED = "spotted"  # a member reporting stock they've seen, not a reading from the retailer
 
 
 # Out-of-stock alerts are opt-in per route; everything else is on by default.

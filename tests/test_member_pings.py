@@ -6,7 +6,8 @@ import discord
 import pytest
 
 from tcgpings.discord import sender
-from tcgpings.discord.commands import ping_keywords_problem
+from tcgpings.discord.commands import allowed, ping_keywords_problem, spotted_event
+from tcgpings.discord.embeds import build_embed
 from tcgpings.discord.sender import MAX_CONTENT, deliver, ping_messages
 from tcgpings.models import Event, EventType
 
@@ -57,3 +58,29 @@ async def test_deliver_only_allows_the_tagged_members(monkeypatch):
     for message in sent:
         allowed = message["allowed_mentions"]
         assert allowed.everyone is False and allowed.roles is False and len(allowed.users) <= 100
+
+
+def test_spotted_alert_is_labelled_a_member_report_and_names_the_reporter():
+    event = spotted_event("Pokemon 30th Booster Bundle", "warehouse", "The Warehouse", "Westgate", 42, "limit *2*")
+    embed = build_embed(Event.from_payload(event.to_payload()))
+    assert embed.author.name == "👀 Spotted in store · The Warehouse · Westgate"
+    assert embed.url is None and embed.description is None
+    fields = {f.name: f.value for f in embed.fields}
+    assert fields["Reported by"] == "<@42>" and fields["Store"] == "Westgate" and fields["Game"] == "Pokémon"
+    assert fields["Note"] == "Member report, not confirmed by the retailer. limit \\*2\\*"
+
+
+def interaction(command_name, roles=(), trusted_role=7, parent=None):
+    user = SimpleNamespace(roles=[SimpleNamespace(id=r) for r in roles])
+    command = SimpleNamespace(name=command_name, root_parent=SimpleNamespace(name=parent) if parent else None)
+    ctx = SimpleNamespace(settings=SimpleNamespace(trusted_role_id=trusted_role, staff_role_id=9))
+    return SimpleNamespace(user=user, command=command, client=SimpleNamespace(ctx=ctx))
+
+
+def test_who_can_use_what():
+    assert allowed(interaction("add", parent="ping"))  # /ping is open to everyone
+    assert not allowed(interaction("spotted"))
+    assert not allowed(interaction("spotted", roles=[1]))
+    assert allowed(interaction("spotted", roles=[7]))
+    assert not allowed(interaction("spotted", roles=[0], trusted_role=0))  # no role configured
+    assert not allowed(interaction("status", roles=[7]))  # trusted members aren't staff

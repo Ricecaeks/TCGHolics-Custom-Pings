@@ -39,6 +39,19 @@ Staff choose the channel by running `/route pings` in it (e.g. `#custom-pings`).
 
 For retailers with store stock, a keyword can only match a store when that product is being checked per store. JB Hi-Fi, Toyworld and Kmart check every sealed product. Farmers only checks products matching a watch or keyword route, because each check costs money.
 
+## Member sightings
+
+Website checks can't see every store, and stock can reach the shelf before a website knows. `/spotted` lets a trusted member report what they've seen:
+
+```
+/spotted product: 30th Booster Bundle retailer: The Warehouse store: Westgate note: limit 2
+```
+
+- It goes out as a clearly labelled **Spotted in store** alert that names the reporter and says the retailer hasn't confirmed it.
+- It tags members whose `/ping` keywords match, and also posts to routes that don't limit their event types.
+- Staff and members with the `TRUSTED_ROLE_ID` role can use it, up to 5 reports an hour each. The same report within about 15 minutes posts once.
+- Retailer and store are free text, with suggestions for ones we know, so any shop can be reported.
+
 ## One channel for everything (beta)
 
 To see every alert in one place without the bot, create a webhook in that channel and set `ALERT_WEBHOOK_URL` (from the `TEST_CHANNEL_WEBHOOK` repository secret, copied to the deploy machine's `.env`). `DRY_RUN` must be `false` for alerts to actually post. Alerts use the webhook's own name and picture; [`assets/logo.png`](../assets/logo.png) is the logo.

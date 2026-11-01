@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     discord_token: str = ""
     guild_id: int = 0
     staff_role_id: int = 0
+    trusted_role_id: int = 0  # may use /spotted, as well as staff
     log_channel_id: int = 0
 
     proxy_urls: str = ""

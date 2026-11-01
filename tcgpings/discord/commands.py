@@ -1,4 +1,4 @@
-"""Slash commands. /ping is for every member; the rest are restricted to the staff role (or server admins)."""
+"""Slash commands. /ping is for every member, /spotted for trusted members; the rest are for staff (or server admins)."""
 
 from __future__ import annotations
 
@@ -9,14 +9,14 @@ import time
 import discord
 from discord import app_commands
 
-from tcgpings.classify import FRANCHISE_NAMES
+from tcgpings.classify import FRANCHISE_NAMES, franchise_of
 from tcgpings.cluster.leadership import reconcile
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.discord import setup
 from tcgpings.discord.embeds import sample_event
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.models import ANY_STORE, ONLINE, EventType, slugify
+from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, slugify
 from tcgpings.retailers import REGISTRY, build_adapter
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,8 @@ WEBHOOK_NAME = "TCGHolics Pings"
 FRANCHISE_CHOICES = [app_commands.Choice(name=v, value=k) for k, v in FRANCHISE_NAMES.items()]
 EVENT_NAMES = {e.value for e in EventType}
 MAX_PINGS_PER_MEMBER = 25
-PING_EVENTS = [EventType.NEW_PRODUCT.value, EventType.RESTOCK.value]
+PING_EVENTS = [EventType.NEW_PRODUCT.value, EventType.RESTOCK.value, EventType.SPOTTED.value]
+SPOTTED_PER_HOUR = 5
 
 
 def _ctx(interaction: discord.Interaction) -> Context:
@@ -40,6 +41,21 @@ def is_staff(interaction: discord.Interaction) -> bool:
         return True
     role_id = _ctx(interaction).settings.staff_role_id
     return bool(role_id) and any(r.id == role_id for r in member.roles)
+
+
+def is_trusted(interaction: discord.Interaction) -> bool:
+    role_id = _ctx(interaction).settings.trusted_role_id
+    roles = getattr(interaction.user, "roles", [])
+    return is_staff(interaction) or (bool(role_id) and any(r.id == role_id for r in roles))
+
+
+def allowed(interaction: discord.Interaction) -> bool:
+    command = interaction.command
+    if command and command.root_parent and command.root_parent.name == "ping":
+        return True
+    if command and command.name == "spotted":
+        return is_trusted(interaction)
+    return is_staff(interaction)
 
 
 async def _reply(interaction: discord.Interaction, text: str) -> None:
@@ -478,6 +494,49 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
 # --- single commands -------------------------------------------------------------------
 
 
+def spotted_event(product: str, retailer_id: str, retailer_name: str, store: str, reporter: int, note: str | None) -> Event:
+    report = "Member report, not confirmed by the retailer."
+    return Event(
+        type=EventType.SPOTTED, retailer_id=retailer_id, sku=slugify(product), title=product, url="",
+        store_id=slugify(store), store_name=store, franchise=franchise_of(product), new_level="in",
+        extra={"reported_by": reporter, "retailer_name": retailer_name,
+               "note": f"{report} {discord.utils.escape_markdown(note)}" if note else report},
+    )
+
+
+async def known_store_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    retailer_id = getattr(interaction.namespace, "retailer", None)
+    stores = await queries.list_stores(_ctx(interaction).pool, retailer_id) if retailer_id else []
+    return [app_commands.Choice(name=s["name"], value=s["name"]) for s in stores
+            if current.lower() in s["name"].lower()][:25]
+
+
+@app_commands.command(name="spotted", description="Report stock you've seen in a store, tagging members who want it")
+@app_commands.guild_only()
+@app_commands.describe(
+    product="What you saw, e.g. 30th Booster Bundle",
+    retailer="Which retailer",
+    store="Which store, e.g. Westgate",
+    note="Anything else worth knowing, e.g. limit 2, at the service desk",
+)
+@app_commands.autocomplete(retailer=retailer_autocomplete, store=known_store_autocomplete)
+@app_commands.checks.cooldown(SPOTTED_PER_HOUR, 3600, key=lambda interaction: interaction.user.id)
+async def spotted_cmd(
+    interaction: discord.Interaction,
+    product: app_commands.Range[str, 3, 100],
+    retailer: app_commands.Range[str, 2, 40],
+    store: app_commands.Range[str, 2, 40],
+    note: app_commands.Range[str, 1, 200] | None = None,
+) -> None:
+    ctx = _ctx(interaction)
+    row = await queries.get_retailer(ctx.pool, retailer) or {"id": slugify(retailer), "name": retailer, "color": None}
+    product, store = " ".join(product.split()), " ".join(store.split())
+    event = spotted_event(product, row["id"], row["name"], store, interaction.user.id, note)
+    if await ctx.pipeline.report(row, event):
+        return await _reply(interaction, f"Thanks, posted: **{product}** at {row['name']} {store}.")
+    await _reply(interaction, "That was already reported recently, so nothing new was posted.")
+
+
 @app_commands.command(name="setup", description="Create categories, channels, webhooks and routes for every retailer")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
@@ -581,19 +640,22 @@ async def test_alert_cmd(interaction: discord.Interaction) -> None:
 def register(tree: app_commands.CommandTree) -> None:
     for group in (WatchGroup(), RouteGroup(), RetailerGroup(), PingGroup()):
         tree.add_command(group)
-    for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd):
+    for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd, spotted_cmd):
         tree.add_command(cmd)
 
     async def check(interaction: discord.Interaction) -> bool:
-        command = interaction.command
-        if is_staff(interaction) or (command and command.root_parent and command.root_parent.name == "ping"):
+        if allowed(interaction):
             return True
-        await _reply(interaction, "Only TCGHolics staff can use these commands.")
+        if interaction.type is discord.InteractionType.autocomplete:
+            return False
+        await _reply(interaction, "You don't have access to this command.")
         return False
 
     tree.interaction_check = check  # type: ignore[method-assign]
 
     @tree.error
     async def on_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        if isinstance(error, app_commands.CommandOnCooldown):
+            return await _reply(interaction, f"That's the limit of {SPOTTED_PER_HOUR} reports an hour. Try again soon.")
         log.exception("command %s failed", interaction.command and interaction.command.qualified_name, exc_info=error)
         await _reply(interaction, f"Something went wrong: `{type(error).__name__}`. Check the node logs.")
