@@ -4,6 +4,7 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from tcgpings.classify import FRANCHISE_NAMES
 from tcgpings.db import queries
 from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.models import ANY_STORE, DEFAULT_EVENT_TYPES, ONLINE, Event
@@ -44,20 +45,47 @@ def match_routes(routes: Sequence[Mapping[str, Any]], event: Event) -> list[Mapp
     return [r for r in routes if route_matches(r, event)]
 
 
+def ping_text(event: Event) -> str:
+    """What member keywords match: the title, game, retailer and where it's in stock."""
+    return " ".join(filter(None, [
+        event.title,
+        FRANCHISE_NAMES.get(event.franchise or ""),
+        event.extra.get("retailer_name"),
+        "online" if event.store_id == ONLINE else None,
+        *([s["name"] for s in event.stores] or [event.store_name]),
+    ]))
+
+
+def match_member_pings(pings: Sequence[Mapping[str, Any]], event: Event) -> list[dict]:
+    """Members to tag, grouped by the keywords they matched on."""
+    text = ping_text(event)
+    groups: dict[str, list[int]] = {}
+    for ping in pings:
+        if KeywordFilter.parse(ping["keywords"]).matches(text):
+            groups.setdefault(ping["keywords"].lower(), []).append(ping["user_id"])
+    return [{"keywords": keywords, "users": users} for keywords, users in groups.items()]
+
+
 class RouteCache:
-    """Routes change rarely; every node re-reads them at most every `ttl` seconds."""
+    """Routes and member pings change rarely; every node re-reads them at most every `ttl` seconds."""
 
     def __init__(self, db, ttl: float = 30) -> None:
         self._db = db
         self._ttl = ttl
         self._routes: list = []
+        self._pings: list = []
         self._loaded_at = 0.0
 
     async def get(self) -> list:
         if time.monotonic() - self._loaded_at > self._ttl:
             self._routes = list(await queries.list_routes(self._db))
+            self._pings = list(await queries.list_member_pings(self._db))
             self._loaded_at = time.monotonic()
         return self._routes
+
+    async def member_pings(self) -> list:
+        await self.get()
+        return self._pings
 
     def invalidate(self) -> None:
         self._loaded_at = 0.0

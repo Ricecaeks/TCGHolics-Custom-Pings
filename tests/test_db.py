@@ -231,3 +231,45 @@ async def test_single_card_price_change_is_recorded_without_an_alert(pool):
     assert await pool.fetchval("SELECT price_cents FROM product_state WHERE sku = 'mage'") == 350
     await pipe.record(RETAILER, product(price=5999))
     assert [e.type.value for e in await pipe.record(RETAILER, product(price=4999))] == ["price_change"]
+
+
+async def test_member_pings_tag_only_matching_members_in_the_ping_channel(pool):
+    from tcgpings.models import Store
+
+    await seed(pool)
+    await queries.add_route(pool, 1, "https://discord.test/beta")
+    await queries.add_route(pool, 2, "https://discord.test/pings", event_types=["new_product", "restock"], member_pings=True)
+    await queries.upsert_stores(pool, [Store("farmers", "albany", "Albany"), Store("farmers", "botany", "Botany")])
+    for user, keywords in [(1, "30th"), (2, "30th"), (3, "booster bundle -bundle"), (4, "albany"), (5, "sylvia park"), (6, "farmers online")]:
+        await queries.add_member_ping(pool, user, keywords)
+    assert await queries.add_member_ping(pool, 1, "30TH") is None
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    names = {"albany": "Albany", "botany": "Botany"}
+
+    def bundle(level):
+        return Product("farmers", "b", "Pokémon 30th Booster Bundle", "https://x/b", online=Stock(level))
+
+    await pipe.record(RETAILER, bundle(Level.OUT), {"albany": Stock(Level.OUT), "botany": Stock(Level.OUT)}, names)
+    await pipe.record(RETAILER, bundle(Level.OUT), {"albany": Stock(Level.IN, 3), "botany": Stock(Level.OUT)}, names)
+    rows = [r for r in await outbox(pool) if r["route_id"] == 2]
+    assert len(rows) == 1
+    assert rows[0]["payload"]["extra"]["pings"] == [{"keywords": "30th", "users": [1, 2]}, {"keywords": "albany", "users": [4]}]
+    assert "pings" not in next(r for r in await outbox(pool) if r["route_id"] == 1)["payload"]["extra"]
+
+    await pipe.record(RETAILER, bundle(Level.IN), {"albany": Stock(Level.IN, 3), "botany": Stock(Level.OUT)}, names)
+    rows = [r for r in await outbox(pool) if r["route_id"] == 2]
+    assert rows[-1]["payload"]["store_id"] == ""
+    assert {"keywords": "farmers online", "users": [6]} in rows[-1]["payload"]["extra"]["pings"]
+
+    assert not await queries.remove_member_ping(pool, 2, 1)  # one member can't remove another's
+    assert await queries.remove_member_ping(pool, 1, (await queries.list_member_pings(pool, 1))[0]["id"])
+
+
+async def test_ping_channel_stays_quiet_when_nobody_matches(pool):
+    await seed(pool)
+    await queries.add_route(pool, 2, "https://discord.test/pings", member_pings=True)
+    await queries.add_member_ping(pool, 1, "lorcana")
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    await pipe.record(RETAILER, product(Level.OUT))
+    await pipe.record(RETAILER, product(Level.IN))
+    assert await outbox(pool) == []

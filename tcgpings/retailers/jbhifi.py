@@ -68,6 +68,7 @@ def load_bundled_stores() -> list[dict]:
 class JBHiFiAdapter(ShopifyAdapter):
     adapter_name = "jbhifi"
     supports_store_stock = True
+    track_all_discovered = True  # a small sealed range, and any member can ping on any of it
     store_stock_interval = 10 * 60   # product pages are ~600 KB; store stock doesn't move by the second
     default_sku_interval = 3 * 60
     default_requests_per_minute = 20

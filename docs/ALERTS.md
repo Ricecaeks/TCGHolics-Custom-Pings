@@ -20,6 +20,25 @@ Each channel gets a webhook and a route saved in the database. Retailers without
 
 Move, rename or re-sort the channels and categories however you like: routes follow the channel, not its name or place. Re-running `/setup` only fills gaps (a deleted channel is recreated, existing ones are left alone). The preview shows how many channels the server would have against Discord's 500 limit. Add keywords per channel afterwards with `/route keywords`.
 
+## Member keyword pings
+
+Any member can set their own keywords, and alerts that match tag them in one channel.
+
+```
+/ping add keywords: 30th booster bundle, -sleeves
+/ping add keywords: 30th albany
+/ping list
+/ping remove ping_id: 3
+```
+
+- Keywords match the product title, game, retailer and store names, so `kmart albany` and `pokemon online` both work. The syntax is the same as route keywords below.
+- Only new listings and restocks ping. Price changes and stock count increases don't.
+- Each member can have 25.
+
+Staff choose the channel by running `/route pings` in it (e.g. `#custom-pings`). The channel only gets alerts someone asked for.
+
+For retailers with store stock, a keyword can only match a store when that product is being checked per store. JB Hi-Fi, Toyworld and Kmart check every sealed product. Farmers only checks products matching a watch or keyword route, because each check costs money.
+
 ## One channel for everything (beta)
 
 To see every alert in one place without the bot, create a webhook in that channel and set `ALERT_WEBHOOK_URL` (from the `TEST_CHANNEL_WEBHOOK` repository secret, copied to the deploy machine's `.env`). `DRY_RUN` must be `false` for alerts to actually post. Alerts use the webhook's own name and picture; [`assets/logo.png`](../assets/logo.png) is the logo.
