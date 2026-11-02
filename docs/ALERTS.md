@@ -142,6 +142,7 @@ Farmers' site says store stock was "updated at 8am this morning" (fixed text, no
 | Farmers | ✅ (via Constructor) | ✅ | ✅ daily | ✅ daily, 53 stores (via the fetch chain) | — |
 | The Warehouse | ✅ | ✅ (incl. "in stores only") | ✅ | — | — |
 | Toyworld | ✅ | ✅ | ✅ | ✅ 36 stores, in / low / out | ✅ |
+| The Warehouse | ✅ | ✅ | ✅ | Nationwide only, plus `/spotted` for named stores | — |
 | Shopify card shops | ✅ | ✅ | ✅ | — | ✅ |
 | Kmart | ✅ (via Constructor) | ✅ (most Pokémon is in-store only) | ✅ | ✅ 28 stores, with unit counts | — |
 | Noel Leeming, … | coming | | | | |

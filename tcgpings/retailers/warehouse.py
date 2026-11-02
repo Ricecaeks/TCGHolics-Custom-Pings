@@ -7,6 +7,10 @@ sorted newest first (`/search?cgid=...&srule=newest`, 32 tiles a page). Each til
 newest (hot products were on page 2), and products don't reach every listing together, so discovery
 also reads a search, and logs which listing shows each product first.
 
+In-store stock is nationwide only: a tile's FIND_IN_STORE means some store has it, which the bot tracks
+as one "store". A product that was in stores and then leaves the listings counts as out, so its return
+can alert.
+
 Not covered:
   - Per-store stock: the store-availability call needs a signed per-product token, and hot
     Pokémon products sit behind a Cloudflare challenge. Left out deliberately.
@@ -23,7 +27,7 @@ import logging
 import re
 from urllib.parse import quote
 
-from tcgpings.models import Level, Product, Stock, to_cents
+from tcgpings.models import Level, Product, Stock, Store, to_cents
 from tcgpings.net.http import FetchError
 from tcgpings.retailers.base import RetailerAdapter, register
 
@@ -34,6 +38,9 @@ TRADING_CARDS = "toysbaby-toys-collectibletoys-tradingcardsaccs"
 PAGE_SIZE = 32
 DISCOVERY_SEARCHES = ("pokemon tcg",)
 IN_STORES_ONLY = "In stores, not online"
+IN_STORES = "in-stores"
+IN_STORES_NAME = "Stores nationwide"
+GONE_AFTER_SCANS = 3  # listings can flicker, so a product must be missing this many scans in a row
 
 STOCK_STATUS = {
     "IN_STOCK": Level.IN,
@@ -58,6 +65,14 @@ _IMG = re.compile(r'<img[^>]*class="tile-image[^"]*"[^>]*src="([^"]+)"', re.S)
 _LD = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 _CANONICAL = re.compile(r'<link rel="canonical" href="([^"]+)"')
 _SKU_IN_URL = re.compile(r"/([A-Z]{1,2}\d{5,10})\.html")
+
+
+def _in_store_stock(status: str | None) -> dict[str, Stock] | None:
+    if status == "FIND_IN_STORE":
+        return {IN_STORES: Stock(Level.IN)}
+    if status in ("OUT_OF_STOCK", "NOT_AVAILABLE"):
+        return {IN_STORES: Stock(Level.OUT)}
+    return None  # sold online, so the listing says nothing about stores
 
 
 def _tile_level(status: str | None, orderable: str | None) -> Level:
@@ -94,6 +109,7 @@ def parse_tiles(page: str, retailer_id: str = "warehouse", marketplace: bool = F
             image=html.unescape(img.group(1)) if img else None,
             price_cents=to_cents(data.get("price")),
             online=Stock(_tile_level(stock_status, orderable and orderable.group(1))),
+            stores=_in_store_stock(stock_status),
             note=IN_STORES_ONLY if stock_status == "FIND_IN_STORE" else None,
         ))
     return products
@@ -131,6 +147,7 @@ def parse_product(page: str, sku: str, retailer_id: str = "warehouse") -> Produc
 class WarehouseAdapter(RetailerAdapter):
     adapter_name = "warehouse"
     supports_discovery = True
+    stock_in_listings = True
     default_discover_interval = 120
     default_sku_interval = 5 * 60
     default_search_interval = 10 * 60
@@ -140,6 +157,8 @@ class WarehouseAdapter(RetailerAdapter):
     def __init__(self, retailer, http) -> None:
         super().__init__(retailer, http)
         self._seen: dict[str, set[str]] = {}
+        self._in_stores: dict[str, Product] = {}
+        self._missing: dict[str, int] = {}
 
     def _listing_url(self, params: str, start: int = 0) -> str:
         return f"{BASE}/search?{params}&srule=newest&start={start}&sz={PAGE_SIZE}"
@@ -165,7 +184,32 @@ class WarehouseAdapter(RetailerAdapter):
                 self._collect(found, f"search {query}", await self._listing(f"q={quote(query)}", 1))
             except FetchError as exc:  # the categories already gave a good result
                 log.info("warehouse: discovery search %r failed: %s", query, exc)
-        return list(found.values())
+        return list(found.values()) + self._left_the_listings(found)
+
+    def _left_the_listings(self, found: dict[str, Product]) -> list[Product]:
+        """Products that were in stores and have now been missing from the listings for several scans."""
+        gone = []
+        for sku in list(self._in_stores):
+            if sku in found:
+                self._missing.pop(sku, None)
+                continue
+            self._missing[sku] = self._missing.get(sku, 0) + 1
+            if self._missing[sku] >= GONE_AFTER_SCANS:
+                product = self._in_stores.pop(sku)
+                del self._missing[sku]
+                product.stores = {IN_STORES: Stock(Level.OUT)}
+                product.note = None
+                gone.append(product)
+        self._in_stores.update({
+            sku: p for sku, p in found.items() if p.stores and p.stores[IN_STORES].level is Level.IN
+        })
+        return gone
+
+    async def list_stores(self) -> list[Store]:
+        return [Store(self.retailer_id, IN_STORES, IN_STORES_NAME)]
+
+    def store_label(self, store_id: str) -> str:
+        return IN_STORES_NAME
 
     def _collect(self, found: dict[str, Product], source: str, products: list[Product]) -> None:
         seen = self._seen.get(source)

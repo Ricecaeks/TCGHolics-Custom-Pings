@@ -113,3 +113,40 @@ def test_in_store_only_tile_says_so():
     products = {p.sku: p for p in parse_tiles(load_fixture("warehouse", "listing.html"))}
     assert products["R3083239"].note == "In stores, not online"
     assert products["R3083239"].online.level is Level.OUT
+
+
+def test_in_store_tiles_track_stores_nationwide():
+    from tcgpings.retailers.warehouse import IN_STORES
+
+    products = {p.sku: p for p in parse_tiles(load_fixture("warehouse", "listing.html"))}
+    assert products["R3083239"].stores[IN_STORES].level is Level.IN
+    assert all(p.stores is None or IN_STORES in p.stores for p in products.values())
+
+
+async def test_a_product_that_leaves_the_listings_goes_out_after_several_scans():
+    from tcgpings.retailers.warehouse import GONE_AFTER_SCANS, IN_STORES
+
+    listing = load_fixture("warehouse", "listing.html")
+    http = FakeHttp(listing, listing)
+    a = WarehouseAdapter(ROW, http)
+    assert "R3083239" in {p.sku for p in await a.discover()}
+    for _ in range(GONE_AFTER_SCANS - 1):
+        http.pages = ["", ""]
+        assert await a.discover() == []
+    http.pages = ["", ""]
+    [gone] = await a.discover()
+    assert gone.sku == "R3083239" and gone.stores[IN_STORES].level is Level.OUT
+    http.pages = ["", ""]
+    assert await a.discover() == []
+
+
+async def test_a_brief_flicker_does_not_count_as_gone():
+    listing = load_fixture("warehouse", "listing.html")
+    http = FakeHttp(listing, listing)
+    a = WarehouseAdapter(ROW, http)
+    await a.discover()
+    http.pages = ["", ""]
+    assert await a.discover() == []
+    http.pages = [listing, listing]
+    await a.discover()
+    assert a._missing == {}
