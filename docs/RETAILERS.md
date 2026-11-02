@@ -6,7 +6,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 |---|---|---|---|
 | Shopify card shops (any) | `shopify` | — (online only) | **live** |
 | Farmers | `farmers` | yes: In / Not in stock, 53 stores | **live via Constructor.io** (discovery, search, online stock). Price and per-store stock once a day through the fetch chain (Chrome → ScrapFly → Zyte) |
-| The Warehouse | `warehouse` | not used (see below) | **live, online only** (discovery of the Trading Cards category newest-first, search, price, online stock incl. "in stores only"). No add-to-cart link (Turnstile) |
+| The Warehouse | `warehouse` | nationwide only: "in stores" or not | **live** (discovery of the Trading Cards category newest-first, search, price, online stock incl. "in stores only"). No add-to-cart link (Turnstile) |
 | Noel Leeming | `noelleeming` | yes (expected) | recon pending |
 | Warehouse Stationery | `warehousestationery` | yes (expected) | recon pending (Cloudflare challenge) |
 | Kmart NZ | `kmart` | yes: unit counts, 28 stores | **live** (Constructor.io for discovery of Trading Cards newest-first, search, price, online stock; Kmart's gateway for per-store counts). No add-to-cart link |
@@ -96,6 +96,7 @@ Farmers' site search is hosted by Constructor.io on `ac.cnstrc.com`, which isn't
 - Discovery also reads `/search?q=pokemon%20tcg`, because "newest" isn't strictly newest (the 30th products were on page 2) and products may not reach every listing together. Tiles with `FIND_IN_STORE` get an "In stores, not online" note on alerts.
 - **Listing timing (unproven):** first sightings so far landed around 3:15–3:30am NZ. On 2026-10-31 another bot posted three 30th products at 3:19–3:23am. We saw the Bundle at 3:27am, but the Mini Tin and Build & Battle Box only at 3:16am the next day, and the cause is unknown. The log line `warehouse: <listing> first shows <id>` records which listing shows each product first.
 - Single-product watches read the product page's JSON-LD (`/p/x/<id>.html` works for any id). Hot Pokémon pages (and even a search for their id) return a Cloudflare challenge, so for those the category tiles are the only source.
+- **Nationwide in-store alerts:** `FIND_IN_STORE` tiles count as in stock at one pseudo-store, "Stores nationwide". A product missing from the listings for 3 scans in a row counts as out, so its return alerts. This can't say which store, and how closely it tracks real stock isn't known.
 - Per-store stock is **not implemented**: the store-availability call needs a signed per-product token from the product page. Automating that was ruled out as circumventing the site's access controls, and challenge pages make it impossible for hot items anyway. Revisit only with The Warehouse's permission or via the unblocker augment (see [ROADMAP.md](ROADMAP.md)).
 
 ## Toyworld (recon 2026-10-29)
