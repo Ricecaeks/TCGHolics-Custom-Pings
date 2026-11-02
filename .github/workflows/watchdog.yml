@@ -22,14 +22,19 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      WEBHOOK: ${{ secrets.TEST_CHANNEL_WEBHOOK }}
+      BOT_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+      CHANNEL_ID: ${{ secrets.LOG_CHANNEL_ID }}
+      PING_USER_ID: ${{ vars.OFFLINE_PING_USER_ID }}
       MAX_AGE_MINUTES: ${{ inputs.max_age_minutes || '60' }}
     steps:
       - name: Compare the last heartbeat with the open outage
         run: |
+          # Posts as the bot, so this works with the machine off, and tags the owner so the phone gets a push.
           post() {
-            jq -n --arg content "$1" '{content: $content, allowed_mentions: {parse: []}}' |
-              curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
+            jq -n --arg content "<@$PING_USER_ID> $1" --arg user "$PING_USER_ID" \
+              '{content: $content, allowed_mentions: {users: [$user]}}' |
+              curl -fsS -A 'DiscordBot (https://github.com/Ricecaeks, 1)' -H "Authorization: Bot $BOT_TOKEN" \
+                -H 'Content-Type: application/json' -d @- "https://discord.com/api/v10/channels/$CHANNEL_ID/messages" > /dev/null
           }
           last=$(gh run list --workflow heartbeat.yml --status success --limit 1 --json createdAt -q '.[0].createdAt')
           if [ -z "$last" ]; then echo "No heartbeat yet"; exit 0; fi
@@ -37,9 +42,10 @@ jobs:
           echo "Last heartbeat $age minutes ago"
           issue=$(gh issue list --state open --search 'in:title "Bot offline"' --json number -q '.[0].number')
           if [ "$age" -ge "$MAX_AGE_MINUTES" ] && [ -z "$issue" ]; then
-            gh issue create --title "Bot offline" --body "No healthy heartbeat since $last."
+            # Post first: if Discord fails, no issue is open and the next run tries again.
             post ":warning: **Stock alerts are offline.** No healthy heartbeat from GGPC for $age minutes, so drops may be missed."
+            gh issue create --title "Bot offline" --body "No healthy heartbeat since $last."
           elif [ "$age" -lt "$MAX_AGE_MINUTES" ] && [ -n "$issue" ]; then
-            gh issue close "$issue" --comment "Heartbeats are back."
             post ":white_check_mark: **Stock alerts are back online.** Anything that changed during the outage alerts on the next check."
+            gh issue close "$issue" --comment "Heartbeats are back."
           fi
