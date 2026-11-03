@@ -44,8 +44,12 @@ class Settings(BaseSettings):
     zyte_api_key: str = ""
     zyte_geolocation: str = ""  # e.g. NZ; blank lets Zyte choose (an explicit country can cost more)
     zyte_usd_per_request: float = 0.00127  # hardest site tier, plain HTTP, pay as you go
-    # Paid routes stop for the rest of the month at this spend; past 80% Farmers checks fewer regions.
-    unblocker_monthly_budget_usd: float = 20.0
+    # Each paid route stops for the rest of the month at its own cap: the ScrapFly plan's credits, and
+    # Zyte's prepaid balance.
+    scrapfly_monthly_credits: int = 200_000
+    zyte_monthly_budget_usd: float = 5.0
+    # All paid routes stop at this total; past 80% Farmers checks fewer regions. 200k credits (US$30) + US$5.
+    unblocker_monthly_budget_usd: float = 35.0
     unblocker_low_budget_ratio: float = 0.8
     # How long a route rests after the site blocks it, before it's tried again on its own.
     browser_block_cooldown: int = 24 * 3600

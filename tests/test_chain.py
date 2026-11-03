@@ -277,3 +277,12 @@ async def test_scrapfly_uses_a_retailers_own_project_key():
     await b.fetch(NetPolicy("kmart", requests_per_minute=60), "o", URL, None)
     await b.fetch(POLICY, "o", URL, None)  # farmers has no project key of its own
     assert [params["key"] for _, params in session.calls] == ["kmart-project", "shared"]
+
+
+async def test_a_route_past_its_own_cap_rests_while_the_others_carry_on():
+    zyte, scrapfly = Route("zyte", [PAGE], cost=0.6), Route("scrapfly", [PAGE], cost=0.01)
+    c = FetchChain([zyte, scrapfly], MemoryChainStore(), budget_usd=10.0, backend_budgets={"zyte": 1.0})
+    await c.fetch_text(POLICY, "o", URL)
+    await c.fetch_text(POLICY, "o", URL)  # Zyte has spent $1.20 of its $1.00 now
+    await c.fetch_text(POLICY, "o", URL)
+    assert (zyte.calls, scrapfly.calls) == (2, 1)

@@ -719,10 +719,12 @@ async def add_spend(db: DB, backend: str, usd: float) -> None:
     )
 
 
-async def month_spend(db: DB) -> float:
+async def month_spend(db: DB, backend: str | None = None) -> float:
+    """This month's unblocker spend in USD: every backend's, or one backend's."""
     return float(await db.fetchval(
         "SELECT coalesce(sum(cost_usd), 0) FROM unblocker_spend"
-        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date"
+        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date AND ($1::text IS NULL OR backend = $1)",
+        backend,
     ))
 
 
