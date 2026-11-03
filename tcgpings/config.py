@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     # Paid unblockers, tried when our own Chrome is denied (net/chain.py). Each is off until its key is set.
     scrapfly_api_key: str = ""
+    # One ScrapFly project per retailer, so the dashboard shows where credits go. Blank uses the key above.
+    scrapfly_api_key_kmart: str = ""
+    scrapfly_api_key_farmers: str = ""
+    scrapfly_api_key_warehouse: str = ""
     scrapfly_country: str = "nz"
     scrapfly_usd_per_credit: float = 0.00015  # Discovery plan: US$30 for 200k credits
     scrapfly_cost_budget: int = 0  # max credits per request; 0 = no per-request cap

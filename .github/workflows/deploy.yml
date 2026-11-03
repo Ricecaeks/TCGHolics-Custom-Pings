@@ -39,6 +39,9 @@ jobs:
       - name: Copy secrets into .env
         env:
           SCRAPFLY_API_KEY: ${{ secrets.SCRAPFLY_API_KEY }}
+          SCRAPFLY_API_KEY_KMART: ${{ secrets.SCRAPFLY_API_KEY_KMART }}
+          SCRAPFLY_API_KEY_FARMERS: ${{ secrets.SCRAPFLY_API_KEY_FARMERS }}
+          SCRAPFLY_API_KEY_WAREHOUSE: ${{ secrets.SCRAPFLY_API_KEY_WAREHOUSE }}
           ZYTE_API_KEY: ${{ secrets.ZYTE_API_KEY }}
           ALERT_WEBHOOK_URL: ${{ secrets.TEST_CHANNEL_WEBHOOK }}
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
@@ -49,7 +52,7 @@ jobs:
         run: |
           # A secret that isn't set leaves any value already in .env alone.
           [ -z "$(tail -c1 "$TCGPINGS_ENV")" ] || echo >> "$TCGPINGS_ENV"
-          for name in SCRAPFLY_API_KEY ZYTE_API_KEY ALERT_WEBHOOK_URL DISCORD_TOKEN GUILD_ID STAFF_ROLE_ID MEMBERS_ROLE_ID LOG_CHANNEL_ID; do
+          for name in SCRAPFLY_API_KEY SCRAPFLY_API_KEY_KMART SCRAPFLY_API_KEY_FARMERS SCRAPFLY_API_KEY_WAREHOUSE ZYTE_API_KEY ALERT_WEBHOOK_URL DISCORD_TOKEN GUILD_ID STAFF_ROLE_ID MEMBERS_ROLE_ID LOG_CHANNEL_ID; do
             value="${!name}"
             [ -n "$value" ] || continue
             sed -i "/^$name=/d" "$TCGPINGS_ENV"

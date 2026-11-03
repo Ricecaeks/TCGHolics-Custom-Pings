@@ -269,3 +269,11 @@ async def test_zyte_sends_a_post_body():
     _, request, _ = session.calls[0]
     assert text == '{"data": {}}'
     assert request["httpRequestMethod"] == "POST" and request["httpRequestText"] == '{"q": 1}'
+
+
+async def test_scrapfly_uses_a_retailers_own_project_key():
+    session = FakeSession(FakeResponse(200, PAGE))
+    b = ScrapFlyBackend("shared", session=session, project_keys={"kmart": "kmart-project"})
+    await b.fetch(NetPolicy("kmart", requests_per_minute=60), "o", URL, None)
+    await b.fetch(POLICY, "o", URL, None)  # farmers has no project key of its own
+    assert [params["key"] for _, params in session.calls] == ["kmart-project", "shared"]

@@ -58,10 +58,15 @@ async def build_context(settings: Settings) -> Context:
 def build_chain(settings: Settings, store: ChainStore, http: HttpClient) -> FetchChain:
     """Our Chrome first, then each unblocker whose API key is set."""
     backends = [BrowserBackend(http.browser)]
-    if settings.scrapfly_api_key:
+    project_keys = {rid: key for rid, key in (
+        ("kmart", settings.scrapfly_api_key_kmart),
+        ("farmers", settings.scrapfly_api_key_farmers),
+        ("warehouse", settings.scrapfly_api_key_warehouse),
+    ) if key}
+    if settings.scrapfly_api_key or project_keys:
         backends.append(ScrapFlyBackend(
             settings.scrapfly_api_key, settings.scrapfly_country, settings.scrapfly_usd_per_credit,
-            settings.scrapfly_cost_budget, settings.node_name,
+            settings.scrapfly_cost_budget, settings.node_name, project_keys=project_keys,
         ))
     if settings.zyte_api_key:
         backends.append(ZyteBackend(settings.zyte_api_key, settings.zyte_geolocation, settings.zyte_usd_per_request))
