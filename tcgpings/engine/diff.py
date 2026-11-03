@@ -7,6 +7,8 @@ from typing import Any
 
 from tcgpings.models import ONLINE, Event, EventType, Level, Product, Stock
 
+QTY_JUMP = 3  # the smallest rise in a store's count that's a delivery rather than a return or recount
+
 
 def _event(kind: EventType, product: Product, store_id: str, store_name: str | None, **kw: Any) -> Event:
     return Event(
@@ -47,8 +49,9 @@ def diff_state(
     """Events for one product at one location.
 
     - First observation is a silent baseline (adding a watch doesn't flood channels).
-    - Quantity alerts fire on increases, or when the level moves between LOW and IN;
-      a shelf selling down 12 -> 11 -> 10 stays quiet.
+    - Quantity alerts fire on a real delivery (at least QTY_JUMP units and a tenth of the shelf),
+      or when the level moves between LOW and IN; a shelf selling down 12 -> 11 -> 10, or a
+      return nudging 133 -> 134, stays quiet.
     - Price changes are only tracked for the online state.
     """
     if prev is None or new.level is Level.UNKNOWN:
@@ -68,7 +71,7 @@ def diff_state(
     elif old.level.available and not new.level.available and new.level is Level.OUT:
         events.append(_event(EventType.OUT_OF_STOCK, product, store_id, store_name, **state))
     elif old.level.available and new.level.available:
-        qty_up = old.qty is not None and new.qty is not None and new.qty > old.qty
+        qty_up = old.qty is not None and new.qty is not None and new.qty - old.qty >= max(QTY_JUMP, old.qty // 10)
         if qty_up or old.level != new.level:
             events.append(_event(EventType.QTY_CHANGE, product, store_id, store_name, **state))
 

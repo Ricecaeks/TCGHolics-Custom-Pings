@@ -43,6 +43,13 @@ def test_qty_increase_alerts_but_selling_down_is_quiet():
     assert diff_state(product(), "w", "W", prev("in", 12), Stock(Level.IN, 11), None) == []
 
 
+def test_a_small_rise_is_a_return_not_a_delivery():
+    assert diff_state(product(), "w", "W", prev("in", 133), Stock(Level.IN, 134), None) == []
+    assert diff_state(product(), "w", "W", prev("in", 1099), Stock(Level.IN, 1128), None) == []
+    assert types(diff_state(product(), "w", "W", prev("in", 2), Stock(Level.IN, 6), None)) == [EventType.QTY_CHANGE]
+    assert types(diff_state(product(), "w", "W", prev("in", 133), Stock(Level.IN, 160), None)) == [EventType.QTY_CHANGE]
+
+
 def test_level_change_between_low_and_in():
     assert types(diff_state(product(), "w", "W", prev("in"), Stock(Level.LOW), None)) == [EventType.QTY_CHANGE]
     assert types(diff_state(product(), "w", "W", prev("low"), Stock(Level.IN), None)) == [EventType.QTY_CHANGE]
