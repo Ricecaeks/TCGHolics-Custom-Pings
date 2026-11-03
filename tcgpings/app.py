@@ -75,6 +75,10 @@ def build_chain(settings: Settings, store: ChainStore, http: HttpClient) -> Fetc
         backends, store, http.limiter,
         settings.unblocker_monthly_budget_usd, settings.unblocker_low_budget_ratio,
         Cooldowns(settings.browser_block_cooldown, settings.unblocker_block_cooldown),
+        backend_budgets={
+            "scrapfly": settings.scrapfly_monthly_credits * settings.scrapfly_usd_per_credit,
+            "zyte": settings.zyte_monthly_budget_usd,
+        },
     )
 
 

@@ -12,7 +12,7 @@ nodes share it and it survives restarts:
 - The retailer answering with an error (e.g. 404) is a real answer: it's raised, not retried.
 
 Paid routes count their spend per calendar month. Past `budget_usd` they're skipped until the
-next month; past `low_ratio` of it, `budget_low()` lets adapters cut back (Farmers checks fewer regions).
+next month, and so is each route past its own `backend_budgets` cap (e.g. the ScrapFly plan's credits); past `low_ratio` of it, `budget_low()` lets adapters cut back (Farmers checks fewer regions).
 """
 
 from __future__ import annotations
@@ -67,6 +67,7 @@ class ChainStore(Protocol):
     async def ok(self, retailer_id: str, backend: str) -> None: ...
     async def spend(self, backend: str, usd: float) -> None: ...
     async def month_spend(self) -> float: ...
+    async def backend_spend(self, backend: str) -> float: ...
 
 
 class DbChainStore:
@@ -90,6 +91,9 @@ class DbChainStore:
 
     async def month_spend(self) -> float:
         return await queries.month_spend(self.pool)
+
+    async def backend_spend(self, backend: str) -> float:
+        return await queries.month_spend(self.pool, backend)
 
 
 class MemoryChainStore:
@@ -123,6 +127,9 @@ class MemoryChainStore:
     async def month_spend(self) -> float:
         return sum(self.spent.values())
 
+    async def backend_spend(self, backend: str) -> float:
+        return self.spent.get(backend, 0.0)
+
 
 @dataclass
 class Cooldowns:
@@ -139,6 +146,7 @@ class FetchChain:
         budget_usd: float = 20.0,
         low_ratio: float = 0.8,
         cooldowns: Cooldowns | None = None,
+        backend_budgets: dict[str, float] | None = None,
     ) -> None:
         self.backends = {b.name: b for b in backends}
         self.store = store
@@ -146,6 +154,7 @@ class FetchChain:
         self.budget_usd = budget_usd
         self.low_ratio = low_ratio
         self.cooldowns = cooldowns or Cooldowns()
+        self.backend_budgets = backend_budgets or {}  # route -> its own monthly cap in USD
 
     def available(self, order: list[str]) -> list[str]:
         """The routes in `order` this node can actually use (an unblocker needs its API key set)."""
@@ -181,6 +190,10 @@ class FetchChain:
                 continue
             if backend.paid and self.budget_usd > 0 and await self.store.month_spend() >= self.budget_usd:
                 skipped.append(f"{name} over monthly budget")
+                continue
+            cap = self.backend_budgets.get(name)
+            if backend.paid and cap and await self.store.backend_spend(name) >= cap:
+                skipped.append(f"{name} over its own monthly budget")
                 continue
             if backend.paid:
                 await self.limiter.acquire(rid, name, policy.requests_per_minute)
