@@ -13,11 +13,15 @@ Store stock comes from the queries behind the product page's stock display, on K
 No key or sign-in. A count for any postcode's five nearest stores, for many products at once, so a
 sweep asks one postcode at a time until every store has answered. Akamai challenged this after about
 2.5 hours of sweeps every 5 minutes, so sweeps are slower now and back off hard when refused.
+While Akamai refuses our own requests, sweeps go through the fetch chain's paid unblockers
+(config "fetch", default ScrapFly) every 30 minutes, under the chain's breakers and budget.
+Zyte isn't in the default: it got "Website Ban" (520) on this gateway on 2026-11-04.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 import time
@@ -56,6 +60,8 @@ STORE_CHECK_SECONDS = 15 * 60
 STORE_BACKOFF_LIMIT = 6 * 3600
 # A short block keeps the last store counts; the islands only stand in once they're this stale.
 ISLANDS_AFTER_SECONDS = 2 * 3600
+UNBLOCKER_ORDER = ["scrapfly"]
+UNBLOCKED_CHECK_SECONDS = 30 * 60  # paid sweeps, while Akamai refuses ours
 
 _SKU_IN_URL = re.compile(r"(\d{7,9})/?$")
 _NZ_SUFFIX = re.compile(r"\s+nz$", re.I)
@@ -131,6 +137,12 @@ class KmartAdapter(RetailerAdapter):
         self._next_store_check = 0.0
         self._store_failures = 0
         self._store_ok_at = float("-inf")
+        self._direct_after = 0.0  # when our own requests may try the gateway again after a refusal
+        self.fetch_order = list(self.config.get("fetch") or UNBLOCKER_ORDER)
+
+    @property
+    def _chain(self):
+        return getattr(self.http, "chain", None)
 
     async def _constructor(self, path: str, keep_islands: bool = False, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
@@ -140,12 +152,16 @@ class KmartAdapter(RetailerAdapter):
                 product.stores = None
         return products
 
-    async def _gateway(self, operation: str, query: str, variables: dict) -> dict:
-        resp = await self.http.request(
-            self.policy, "POST", GATEWAY, headers=HEADERS,
-            json={"operationName": operation, "query": query, "variables": variables},
-        )
+    async def _gateway(self, operation: str, query: str, variables: dict, unblocked: bool = False) -> dict:
+        payload = {"operationName": operation, "query": query, "variables": variables}
         try:
+            if unblocked:
+                text = await self._chain.fetch_text(
+                    self.policy, f"{BASE}/", GATEWAY, {**HEADERS, "Content-Type": "application/json"},
+                    self.fetch_order, body=json.dumps(payload),
+                )
+                return json.loads(text)
+            resp = await self.http.request(self.policy, "POST", GATEWAY, headers=HEADERS, json=payload)
             return resp.json()
         except ValueError as exc:
             raise FetchError(f"POST {GATEWAY}: response was not JSON") from exc
@@ -157,25 +173,46 @@ class KmartAdapter(RetailerAdapter):
         )
         counts = None
         if time.monotonic() >= self._next_store_check:
-            try:
-                counts = await self._store_stock([p.sku for p in products if is_sealed_product(p.title)])
-            except FetchError as exc:  # the listings are still good; leave the stores alone for a while
-                self._store_failures += 1
-                wait = min(STORE_CHECK_SECONDS * 2 ** self._store_failures, STORE_BACKOFF_LIMIT)
-                self._next_store_check = time.monotonic() + wait
-                log.warning("kmart: store stock unavailable, next try in %d min: %s", wait // 60, exc)
-            else:
-                self._store_failures = 0
-                self._store_ok_at = time.monotonic()
-                self._next_store_check = self._store_ok_at + STORE_CHECK_SECONDS
+            counts = await self._checked_store_stock([p.sku for p in products if is_sealed_product(p.title)])
         if time.monotonic() - self._store_ok_at < ISLANDS_AFTER_SECONDS:  # islands only when store stock is down
             for product in products:
                 product.stores = (counts or {}).get(product.sku)
         return products
 
-    async def _store_stock(self, skus: list[str]) -> dict[str, dict[str, Stock]]:
+    async def _checked_store_stock(self, skus: list[str]) -> dict[str, dict[str, Stock]] | None:
+        """Our own requests first; while Akamai refuses them, the paid unblockers. None if neither got through
+        (the listings are still good, so the stores are left alone for a while)."""
+        if time.monotonic() >= self._direct_after:
+            try:
+                counts = await self._store_stock(skus)
+            except FetchError as exc:
+                self._store_failures += 1
+                rest = min(STORE_CHECK_SECONDS * 2 ** self._store_failures, STORE_BACKOFF_LIMIT)
+                self._direct_after = time.monotonic() + rest
+                log.warning("kmart: store stock refused, our own requests rest %d min: %s", rest // 60, exc)
+            else:
+                self._store_failures = 0
+                return self._checked(counts, STORE_CHECK_SECONDS)
+        self._next_store_check = self._direct_after
+        if self._chain is None or not self._chain.available(self.fetch_order):
+            return None
+        self._next_store_check = min(self._direct_after, time.monotonic() + UNBLOCKED_CHECK_SECONDS)
+        try:
+            counts = await self._store_stock(skus, unblocked=True)
+        except FetchError as exc:
+            log.warning("kmart: store stock through the unblockers failed too: %s", exc)
+            return None
+        log.info("kmart: store stock served through the unblockers")
+        return self._checked(counts, UNBLOCKED_CHECK_SECONDS)
+
+    def _checked(self, counts: dict[str, dict[str, Stock]], wait: int) -> dict[str, dict[str, Stock]]:
+        self._store_ok_at = time.monotonic()
+        self._next_store_check = self._store_ok_at + wait
+        return counts
+
+    async def _store_stock(self, skus: list[str], unblocked: bool = False) -> dict[str, dict[str, Stock]]:
         """Every store's stock. A store that never answers is left out, not called empty."""
-        stores = self._stores or await self._load_stores()
+        stores = self._stores or await self._load_stores(unblocked)
         stock: dict[str, dict[str, Stock]] = {}
         for start in range(0, len(skus), BATCH):
             products = [{"keycode": sku, "quantity": 1, "isNationalInventory": False, "isClickAndCollectOnly": True}
@@ -187,7 +224,7 @@ class KmartAdapter(RetailerAdapter):
                 data = await self._gateway("getProductAvailability", STOCK_QUERY, {"input": {
                     "country": "NZ", "postcode": store["postcode"], "products": products,
                     "fulfilmentMethods": ["CLICK_AND_COLLECT"], "limit": 5,
-                }})
+                }}, unblocked)
                 for sku, counts in parse_store_counts(data).items():
                     answered.update(counts)
                     stock.setdefault(sku, {}).update(
@@ -195,8 +232,10 @@ class KmartAdapter(RetailerAdapter):
                     )
         return stock
 
-    async def _load_stores(self) -> list[dict]:
-        self._stores = parse_store_list(await self._gateway("getNearestLocations", STORES_QUERY, ALL_OF_NZ))
+    async def _load_stores(self, unblocked: bool = False) -> list[dict]:
+        self._stores = parse_store_list(
+            await self._gateway("getNearestLocations", STORES_QUERY, ALL_OF_NZ, unblocked)
+        )
         return self._stores
 
     async def search(self, query: str) -> list[Product]:

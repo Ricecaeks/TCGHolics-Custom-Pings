@@ -1,12 +1,14 @@
 """Paid unblocker APIs: the fallback when our own Chrome is denied by a site's bot protection.
 
-Each backend fetches one URL and returns (body, cost in USD). They raise:
+Each backend fetches one URL, or POSTs a body to it (Kmart's JSON gateway), and returns
+(body, cost in USD). They raise:
 - Blocked:       the unblocker couldn't get past the site either (not billed by either service).
 - ProviderError: a problem with the service itself (bad key, out of credit, throttled).
 - FetchError:    with `status` set when the retailer answered (e.g. 404), else a network failure.
 
 ScrapFly (https://scrapfly.io/docs/scrape-api/getting-started)
     GET api.scrapfly.io/scrape?key=..&url=..&unblocker=true&country=nz&session=..&proxified_response=true
+    A POST to the same address forwards its body (and headers[content-type]) to the retailer.
     The body and status are the retailer's own; failures carry X-Scrapfly-Reject-Code. The cost in
     credits is in X-Scrapfly-Api-Cost. A session keeps cookies and the exit IP for 7 days, so the
     anti-bot clearance is earned once and reused; one session can't be used concurrently.
@@ -14,6 +16,7 @@ Zyte API (https://docs.zyte.com/zyte-api/usage/http.html)
     POST api.zyte.com/v1/extract {"url", "httpResponseBody": true}, API key as the basic-auth user.
     The retailer's status is in `statusCode`; 520/521 mean Zyte was banned. Only successful
     responses are billed, but no cost comes back, so it's estimated from `usd_per_request`.
+    A POST sets "httpRequestMethod": "POST" and the body as "httpRequestText".
 """
 
 from __future__ import annotations
@@ -39,17 +42,18 @@ class ProviderError(FetchError):
         self.cooldown = cooldown
 
 
-def _check_target(url: str, status: int, text: str) -> str:
+def _check_target(url: str, status: int, text: str, method: str = "GET") -> str:
     if status in (403, 429) or looks_like_ban_page(text):
-        raise Blocked(f"GET {url}: HTTP {status} (blocked)")
+        raise Blocked(f"{method} {url}: HTTP {status} (blocked)")
     if status != 200:
-        raise FetchError(f"GET {url}: HTTP {status}", status)
+        raise FetchError(f"{method} {url}: HTTP {status}", status)
     return text
 
 
 class ScrapFlyBackend:
     name = "scrapfly"
     paid = True
+    posts = True
 
     def __init__(self, api_key: str, country: str = "nz", usd_per_credit: float = 0.00015,
                  cost_budget: int = 0, node_name: str = "node", session: Any = None) -> None:
@@ -81,18 +85,25 @@ class ScrapFlyBackend:
             params[f"headers[{name}]"] = value
         return params
 
-    async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None) -> tuple[str, float]:
+    async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None,
+                    body: str | None = None) -> tuple[str, float]:
         lock = self._locks.setdefault(policy.retailer_id, asyncio.Lock())
         async with lock:
             try:
-                resp = await self.session.get(SCRAPFLY_URL, params=self.params(policy, url, headers))
+                if body is None:
+                    resp = await self.session.get(SCRAPFLY_URL, params=self.params(policy, url, headers))
+                else:
+                    content_type = next((v for k, v in (headers or {}).items() if k.lower() == "content-type"),
+                                        "application/json")
+                    resp = await self.session.post(SCRAPFLY_URL, params=self.params(policy, url, headers),
+                                                   data=body, headers={"Content-Type": content_type})
             except RequestsError as exc:
                 raise FetchError(f"scrapfly: {exc}") from exc
         cost = float(resp.headers.get("x-scrapfly-api-cost") or 0) * self.usd_per_credit
         reject = resp.headers.get("x-scrapfly-reject-code")
         if reject:
             raise self._reject_error(resp.status_code, reject)
-        return _check_target(url, resp.status_code, resp.text), cost
+        return _check_target(url, resp.status_code, resp.text, "GET" if body is None else "POST"), cost
 
     @staticmethod
     def _reject_error(status: int, code: str) -> FetchError:
@@ -113,6 +124,7 @@ class ScrapFlyBackend:
 class ZyteBackend:
     name = "zyte"
     paid = True
+    posts = True
 
     def __init__(self, api_key: str, geolocation: str = "", usd_per_request: float = 0.00127,
                  session: Any = None) -> None:
@@ -127,17 +139,20 @@ class ZyteBackend:
             self._session = AsyncSession(timeout=TIMEOUT)
         return self._session
 
-    def body(self, url: str, headers: dict | None) -> dict[str, Any]:
+    def body(self, url: str, headers: dict | None, post: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {"url": url, "httpResponseBody": True}
+        if post is not None:
+            body.update(httpRequestMethod="POST", httpRequestText=post)
         if headers:
             body["customHttpRequestHeaders"] = [{"name": k, "value": v} for k, v in headers.items()]
         if self.geolocation:
             body["geolocation"] = self.geolocation.upper()
         return body
 
-    async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None) -> tuple[str, float]:
+    async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None,
+                    body: str | None = None) -> tuple[str, float]:
         try:
-            resp = await self.session.post(ZYTE_URL, json=self.body(url, headers), auth=(self.api_key, ""))
+            resp = await self.session.post(ZYTE_URL, json=self.body(url, headers, body), auth=(self.api_key, ""))
         except RequestsError as exc:
             raise FetchError(f"zyte: {exc}") from exc
         status = resp.status_code
@@ -154,7 +169,8 @@ class ZyteBackend:
             raise FetchError(message)
         data = resp.json()
         text = base64.b64decode(data.get("httpResponseBody") or "").decode("utf-8", errors="replace")
-        return _check_target(url, int(data.get("statusCode") or 200), text), self.usd_per_request
+        method = "GET" if body is None else "POST"
+        return _check_target(url, int(data.get("statusCode") or 200), text, method), self.usd_per_request
 
     async def close(self) -> None:
         if self._session is not None:

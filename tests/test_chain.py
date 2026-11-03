@@ -150,8 +150,8 @@ class FakeSession:
         self.calls.append((url, params))
         return self.resp
 
-    async def post(self, url, json=None, auth=None):
-        self.calls.append((url, json, auth))
+    async def post(self, url, json=None, auth=None, **kw):
+        self.calls.append((url, json, auth, kw) if kw else (url, json, auth))
         return self.resp
 
 
@@ -234,3 +234,38 @@ def test_daily_checks_spread_over_the_hour():
     due = [daily_check_due(3600, at_830.replace(minute=59), AT, str(sku)) for sku in range(7000000, 7000200)]
     assert 0 < sum(due) < len(due), "some products are due by 8:59, the rest later in the hour"
     assert DAILY_SPREAD_SECONDS == 3600
+
+
+class PostRoute(Route):
+    posts = True
+
+    async def fetch(self, policy, origin, url, headers, body=None):
+        self.body = body
+        return await super().fetch(policy, origin, url, headers)
+
+
+async def test_a_post_skips_the_browser_and_sends_the_body():
+    browser, scrapfly = Route("browser", [PAGE], paid=False, cost=0), PostRoute("scrapfly", ['{"data": 1}'])
+    assert await chain(browser, scrapfly).fetch_text(POLICY, "o", URL, body='{"q": 1}') == '{"data": 1}'
+    assert browser.calls == 0 and scrapfly.body == '{"q": 1}'
+    with pytest.raises(Blocked, match=r"^POST .*\(browser can't POST\)"):
+        await chain(browser).fetch_text(POLICY, "o", URL, body="{}")
+
+
+async def test_scrapfly_forwards_a_post_body():
+    session = FakeSession(FakeResponse(200, '{"data": {}}', {"x-scrapfly-api-cost": "30"}))
+    b = ScrapFlyBackend("k", session=session)
+    text, _ = await b.fetch(POLICY, "o", URL, {"Content-Type": "application/json"}, body='{"q": 1}')
+    url, _, _, kw = session.calls[0]
+    assert text == '{"data": {}}' and kw["data"] == '{"q": 1}'
+    assert kw["headers"] == {"Content-Type": "application/json"} and kw["params"]["url"] == URL
+    assert kw["params"]["headers[Content-Type]"] == "application/json"
+
+
+async def test_zyte_sends_a_post_body():
+    body = base64.b64encode(b'{"data": {}}').decode()
+    session = FakeSession(FakeResponse(200, data={"statusCode": 200, "httpResponseBody": body}))
+    text, _ = await ZyteBackend("k", session=session).fetch(POLICY, "o", URL, None, body='{"q": 1}')
+    _, request, _ = session.calls[0]
+    assert text == '{"data": {}}'
+    assert request["httpRequestMethod"] == "POST" and request["httpRequestText"] == '{"q": 1}'

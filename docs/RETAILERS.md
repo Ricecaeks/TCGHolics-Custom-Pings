@@ -29,7 +29,9 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - Stock is IN/OUT only, because Shopify doesn't expose inventory counts publicly.
 - When a single card's title doesn't name the game, the game is taken from the product type or tags.
 - Verified live on 2026-10-29 against cardmerchant.co.nz and ironknightgaming.co.nz.
-- Shops monitored: Card Merchant and Iron Knight Gaming (added by hand), plus ten shops that listed Delta Reign in Zephyr's alert history (added with `admin add-shopify` on 2026-11-04 after their feeds answered): Game Corner, OCARE, Aniverse, PLAYX, Card Masters, Kidzstuffonline, The Game Tree, Game Roost, Collectors Guild and Toy Time. The other NZ card shops worth adding are listed in `reports/NZ Pokemon TCG retailers.md`.
+- Shops monitored: Card Merchant and Iron Knight Gaming (added by hand), plus ten shops that listed Delta Reign in Zephyr's alert history (added with `admin add-shopify` on 2026-11-04 after their feeds answered): Game Corner, OCARE, Aniverse, PLAYX, Card Masters, Kidzstuffonline, The Game Tree, Game Roost, Collectors Guild and Toy Time. Ten more added the same way later that day: Pop Stop, Mr Tofu, MetaLife, HobbiXchange, Otakumart, Hobby Zone, TCG Collector NZ, Animal Kingdoms, SecretRareVault and Shuffle n Cut.
+  - Shuffle n Cut's newest products are almost all non-card, so it reads its sealed collections (`config.collections`). Otakumart and TCG Collector NZ list singles in bulk, so they read 2 pages (`discover_pages`).
+  - Not Shopify: Retrospace (no `/products.json`). GameKings is Shopify but sells no cards. Shops that need a new adapter are listed in `reports/NZ Pokemon TCG retailers.md`.
 - Shopify's bot check answers `429` to plain HTTP clients; the bot's browser-like client (curl_cffi impersonating Chrome) gets the JSON.
 
 ## Farmers (recon 2026-10-29)
@@ -139,7 +141,10 @@ kmart.co.nz is behind Akamai, but its search runs on Constructor.io (`ac.cnstrc.
 | `getProductAvailability` | `country`, `postcode`, `products: [{keycode, ...}]`, `fulfilmentMethods: ["CLICK_AND_COLLECT"]` | per product, the postcode's 5 nearest stores with `fulfilment.stock.available`, a **unit count** |
 
 - **A sweep:** one product batch per postcode, skipping stores already answered. 8 postcodes covered all 28 stores for 54 products in one test.
-- **Akamai:** after about 2.5 hours of sweeps every 5 minutes on 2026-11-01, every request got `429` with `{"cpr_chlge":"true"}`, a bot challenge we don't solve. Sweeps now run every 15 minutes, and a refusal backs off from 30 minutes up to 6 hours. Whether that's slow enough isn't known yet.
+- **Akamai:** after about 2.5 hours of sweeps every 5 minutes on 2026-11-01, every request got `429` with `{"cpr_chlge":"true"}`, a bot challenge we don't solve. Sweeps now run every 15 minutes, and a refusal rests our own requests from 30 minutes up to 6 hours.
+- **While refused:** the same queries go through the fetch chain's paid unblocker instead (ScrapFly; config `"fetch"`), every 30 minutes, under the chain's breakers and monthly budget. TCGHolics asked for this on 2026-11-04. Our own requests are tried again first once their rest is over, so the unblocker is only paid for during a block. Checked 2026-11-04 with one store-list request each: ScrapFly accepted the POST but the account had hit its quota (`ERR::SCRAPE::QUOTA_LIMIT_REACHED`), so whether it gets past Akamai here is still unproven; Zyte answered `520 Website Ban`, so it isn't in the default order.
+- **Short blocks:** stores keep their last counts. The island flags only stand in for in-store-only products once no store counts have come back for 2 hours.
+- **Count rises:** a rise only alerts when it's at least 3 units and a tenth of the store's count (`QTY_JUMP` in `engine/diff.py`), so returns and recounts (133 → 134) stay quiet.
 - **Checked:** Surging Sparks showed 10 at Sylvia Park while the site said in stock there, and Hot Wheels showed 0 where the site said out of stock. A fake product code showed 0 everywhere.
 - **Not used:** `getFindInStore`, which the "check stock nearby" window calls. It returns `High`, `Medium` or `Low`, and a fake product code also gets `Low`. On kmart.co.nz that window sends it to `api.kmart.com.au`, which returned 429 in testing and made the window say "No nearby stores available".
 - **Not explained:** some very large counts (Rotorua showed 286 of one product). Counts are what the system holds, and stock may not be on the shelf yet.

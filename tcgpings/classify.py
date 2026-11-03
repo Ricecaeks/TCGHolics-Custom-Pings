@@ -43,7 +43,7 @@ PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
 # Franchise merchandise that isn't sealed card product.
 NON_CARD = re.compile(
     r"plush|figure|acrylic(?!.*\bbundle\b)|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|\bmega\s+pok|puzzle|"
-    r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*n\W*go|surprise\s*attack|battle\s*game|"
+    r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*(?:n|and|&)\W*go|surprise\s*attack|battle\s*game|"
     r"bandolier|monopoly|guess\s*who|"
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d|"
@@ -58,6 +58,7 @@ NON_CARD = re.compile(
 # "Biorhythm (Surge Foil) (Secret Lair Countdown Kit) (SLC)".
 # Sealed titles use short codes ("Vault Bundle [RAD]") or a notice ("[Pre-Order]").
 SINGLE_CARD = re.compile(
+    r"\b(?i:psa|bgs|cgc)\s*\d|"  # a graded card: "PSA 10 Japanese Pokémon CLL Clefairy"
     r"\(\d{1,4}[a-z]?\)\s*\(|\)\s*\([A-Z0-9]{3,5}\)\s*$|"
     r"\(\s*\d{1,4}\s*/\s*\d{1,4}\s*\)|\b[A-Z]{0,2}\d{1,3}[a-z*]?/\d{2,3}\b|\b[A-Z0-9]{2,5}-[A-Z]{0,2}\d{3}\b|"
     r"\[[A-Z0-9]{2,5}\s*-\s*\d{1,4}[^\]]*\]|\s-\s.*\b[A-Z]\d{2}[a-z]?$|"
