@@ -150,3 +150,112 @@ async def test_a_brief_flicker_does_not_count_as_gone():
     http.pages = [listing, listing]
     await a.discover()
     assert a._missing == {}
+
+
+# --- Per-store stock: the browser two-step flow (product page -> widget -> per-region), 2026-11-03 ---
+
+
+class FakeBrowser:
+    """Mimics BrowserFetcher: visit() returns the product-page HTML, fetch_text() serves fixture responses."""
+
+    def __init__(self, product_page, responses):
+        self.product_page = product_page
+        self.responses = list(responses)
+        self.visited = []
+        self.fetched = []
+
+    async def visit(self, policy, url, success_js=None, timeout_ms=30_000, settle_ms=500):
+        self.visited.append(url)
+        return self.product_page
+
+    async def fetch_text(self, policy, origin, url, headers=None, retries=1):
+        self.fetched.append(url)
+        if not self.responses:
+            raise FetchError(f"GET {url}: out of fixture responses")
+        text = self.responses.pop(0)
+        if isinstance(text, Exception):
+            raise text
+        return text
+
+
+def _pdp(sku):
+    # Both the plain widget and the edit=true variant exist; the flow must pick the non-edit one.
+    return (
+        "<html><body>"
+        f'<gep-container-store-availability pid="{sku}" url="/products/stores?pid={sku}&amp;verify=TOKEN1">'
+        f'<gep-container-store-availability pid="{sku}" url="/products/stores?pid={sku}&amp;edit=true&amp;verify=TOKENEDIT">'
+        "</body></html>"
+    )
+
+
+def test_widget_store_url_picks_the_non_edit_element_for_that_product():
+    from tcgpings.retailers.warehouse import widget_store_url
+
+    page = _pdp("R3098657")
+    assert widget_store_url(page, "R3098657") == "/products/stores?pid=R3098657&verify=TOKEN1"
+    assert widget_store_url(page, "R999") is None  # another product's widget isn't used
+
+
+def test_parse_store_regions_lists_15_regions_with_their_own_tokens():
+    from tcgpings.retailers.warehouse import parse_store_regions
+
+    regions = parse_store_regions(load_fixture("warehouse", "widget.json"))
+    assert len(regions) == 15
+    url = regions["NZ-AUK"]
+    assert url.startswith("/products/stores/region?")
+    assert "region=NZ-AUK&verify=" in url and "&amp;" not in url
+
+
+def test_parse_store_levels_reads_stock_by_store_id():
+    from tcgpings.retailers.warehouse import parse_store_levels
+
+    levels = parse_store_levels(load_fixture("warehouse", "region-auckland.json"))
+    assert len(levels) == 22
+    assert levels["196"].level is Level.IN   # Warkworth
+    assert levels["221"].level is Level.OUT  # Auckland Central
+
+
+async def test_store_stock_visits_once_fires_the_widget_then_only_the_needed_regions():
+    import json as _json
+
+    from tcgpings.retailers.warehouse import IN_STORES
+
+    widget_text = _json.dumps(load_fixture("warehouse", "widget.json"))
+    region_text = _json.dumps(load_fixture("warehouse", "region-auckland.json"))
+    browser = FakeBrowser(_pdp("R3098657"), [widget_text, region_text])
+    http = FakeHttp()
+    http.browser = browser
+    a = WarehouseAdapter(ROW, http)
+    assert a.store_stock_enabled
+
+    stock = await a.store_stock("R3098657", ["221", "196", IN_STORES])  # only Auckland stores
+    assert stock["196"].level is Level.IN    # Warkworth
+    assert stock["221"].level is Level.OUT   # Auckland Central
+    assert browser.visited == ["https://www.thewarehouse.co.nz/p/x/R3098657.html"]
+    assert len(browser.fetched) == 2         # widget + the one Auckland region
+    assert all("stores/region" in u for u in browser.fetched[1:])
+
+
+async def test_store_stock_ignores_store_ids_outside_the_bundle():
+    import json as _json
+
+    widget_text = _json.dumps(load_fixture("warehouse", "widget.json"))
+    region_text = _json.dumps(load_fixture("warehouse", "region-auckland.json"))
+    browser = FakeBrowser(_pdp("R3098657"), [widget_text, region_text])
+    http = FakeHttp()
+    http.browser = browser
+    a = WarehouseAdapter(ROW, http)
+
+    stock = await a.store_stock("R3098657", ["221", "999"])  # 999 isn't in the 76-store bundle
+    assert set(stock) == {"221"}
+    assert len(browser.fetched) == 2
+
+
+async def test_list_stores_is_the_real_76_plus_the_nationwide_pseudo_store():
+    from tcgpings.retailers.warehouse import IN_STORES, IN_STORES_NAME
+
+    stores = await WarehouseAdapter(ROW, FakeHttp()).list_stores()
+    assert len(stores) == 77  # 76 real + 1 nationwide
+    auk = next(s for s in stores if s.name == "Auckland Central")
+    assert auk.store_id == "221" and auk.region == "NZ-AUK"
+    assert stores[-1].store_id == IN_STORES and stores[-1].name == IN_STORES_NAME

@@ -12,8 +12,17 @@ as one "store". A product that was in stores and then leaves the listings counts
 can alert.
 
 Not covered:
-  - Per-store stock: the store-availability call needs a signed per-product token, and hot
-    Pokémon products sit behind a Cloudflare challenge. Left out deliberately.
+Per-store stock (2026-11-03, validated live in a clean genuine Chrome): hot Pokemon pages sit behind
+a Cloudflare *managed* challenge that auto-solves in a real browser (no checkbox). Store availability
+is two calls, each with a short-lived per-endpoint verify token:
+  1. Load the product page in the browser; its gep-container-store-availability element carries the
+     widget URL (/products/stores?pid=...&verify=T1).
+  2. Fire that URL **once** (repeats 403) -> a modal listing all 15 regions, each with its own
+     per-region token on /products/stores/region?productId=...&region=...&verify=T2.
+  3. Fire the per-region URLs (~47 KB of store-availability__IN_STOCK / __NOT_AVAILABLE panels each).
+     Store id is the c-full-store-details-<id> number, matching the bundled Stores-FindStores list
+     (tcgpings/retailers/data/warehouse_stores.json). store_stock runs this via the browser backend
+     and is gated on it being available.
   - Add-to-cart links: adding to cart requires a Turnstile check, so alerts link the product page.
 Hot products can be challenge-protected even on their product page, so discovery (category
 tiles) is the main source; single-product watches use the product page's JSON-LD.
@@ -25,6 +34,7 @@ import html
 import json
 import logging
 import re
+from importlib import resources
 from urllib.parse import quote
 
 from tcgpings.models import Level, Product, Stock, Store, to_cents
@@ -41,6 +51,11 @@ IN_STORES_ONLY = "In stores, not online"
 IN_STORES = "in-stores"
 IN_STORES_NAME = "Stores nationwide"
 GONE_AFTER_SCANS = 3  # listings can flicker, so a product must be missing this many scans in a row
+# Match the site's own store-availability XHR when we re-fire its widget / region URLs.
+WIDGET_HEADERS = {"accept": "application/json", "x-requested-with": "fetch"}
+# A clean Chrome auto-solves the managed challenge; wait until the product DOM is present.
+PAGE_RESOLVED_JS = ("document.querySelectorAll('gep-container-store-availability').length > 0"
+                    " && !/Just a moment/i.test(document.title)")
 
 STOCK_STATUS = {
     "IN_STOCK": Level.IN,
@@ -143,11 +158,63 @@ def parse_product(page: str, sku: str, retailer_id: str = "warehouse") -> Produc
     return None
 
 
+def load_stores() -> list[dict]:
+    data = resources.files("tcgpings.retailers.data").joinpath("warehouse_stores.json").read_text(encoding="utf-8")
+    return json.loads(data)["stores"]
+
+
+_WIDGET_ELEM = re.compile(r'<gep-container-store-availability[^>]*?pid="([^"]+)"[^>]*?url="([^"]+)"', re.S)
+_REGION_OPTION = re.compile(r'value="([A-Z]+-[A-Z]+)"\s+data-href="([^"]+)"')
+_STORE_PANEL = re.compile(r'<div class="store panel">(.*?)(?=<div class="store panel"|$)', re.S)
+_STORE_DETAIL_ID = re.compile(r'id="c-full-store-details-(\d+)"')
+_STORE_STATUS = re.compile(r'store-availability__([A-Z_]+)')
+
+
+def widget_store_url(page: str, sku: str) -> str | None:
+    """The store-availability widget URL (with its verify token) for a product's own element."""
+    urls = [html.unescape(url) for pid, url in _WIDGET_ELEM.findall(page) if pid == sku]
+    return next((u for u in urls if "edit=" not in u), urls[0] if urls else None)
+
+
+def parse_store_regions(widget) -> dict[str, str]:
+    """Step-1 widget response -> {region_code: region_url}; 15 regions, each with its own verify token."""
+    if not isinstance(widget, dict):
+        try:
+            widget = json.loads(widget)
+        except ValueError:
+            return {}
+    if not isinstance(widget, dict):
+        return {}
+    tpl = widget.get("modalTemplate") or ""
+    return {code: html.unescape(href) for code, href in _REGION_OPTION.findall(tpl)}
+
+
+def parse_store_levels(region) -> dict[str, Stock]:
+    """Step-2 region response -> {store_id: Stock}; store_id is the c-full-store-details number."""
+    if not isinstance(region, dict):
+        try:
+            region = json.loads(region)
+        except ValueError:
+            return {}
+    if not isinstance(region, dict):
+        return {}
+    out: dict[str, Stock] = {}
+    for block in _STORE_PANEL.findall(region.get("stores") or ""):
+        detail = _STORE_DETAIL_ID.search(block)
+        status = _STORE_STATUS.search(block)
+        if detail and status:
+            out[detail.group(1)] = Stock(STOCK_STATUS.get(status.group(1), Level.OUT))
+    return out
+
+
 @register
 class WarehouseAdapter(RetailerAdapter):
     adapter_name = "warehouse"
     supports_discovery = True
     stock_in_listings = True
+    supports_store_stock = True
+    store_stock_discovers_stores = True
+    store_stock_interval = 5 * 60
     default_discover_interval = 120
     default_sku_interval = 5 * 60
     default_search_interval = 10 * 60
@@ -159,6 +226,8 @@ class WarehouseAdapter(RetailerAdapter):
         self._seen: dict[str, set[str]] = {}
         self._in_stores: dict[str, Product] = {}
         self._missing: dict[str, int] = {}
+        self._stores = load_stores()
+        self._region_of = {s["store_id"]: s["region_code"] for s in self._stores}
 
     def _listing_url(self, params: str, start: int = 0) -> str:
         return f"{BASE}/search?{params}&srule=newest&start={start}&sz={PAGE_SIZE}"
@@ -206,10 +275,13 @@ class WarehouseAdapter(RetailerAdapter):
         return gone
 
     async def list_stores(self) -> list[Store]:
-        return [Store(self.retailer_id, IN_STORES, IN_STORES_NAME)]
+        stores = [Store(self.retailer_id, s["store_id"], s["name"], s["region_code"]) for s in self._stores]
+        stores.append(Store(self.retailer_id, IN_STORES, IN_STORES_NAME))
+        return stores
 
     def store_label(self, store_id: str) -> str:
-        return IN_STORES_NAME
+        name = next((s["name"] for s in self._stores if s["store_id"] == store_id), None)
+        return name or (IN_STORES_NAME if store_id == IN_STORES else f"Store {store_id}")
 
     def _collect(self, found: dict[str, Product], source: str, products: list[Product]) -> None:
         seen = self._seen.get(source)
@@ -230,6 +302,41 @@ class WarehouseAdapter(RetailerAdapter):
             if product:
                 products.append(product)
         return products
+
+    @property
+    def store_stock_enabled(self) -> bool:
+        return getattr(self.http, "browser", None) is not None
+
+    async def store_stock(self, sku: str, store_ids: list[str]) -> dict[str, Stock]:
+        """Per-store stock: load the product page in the browser (managed challenge auto-solves),
+        fire its store-availability widget once, then the per-region URLs it returns."""
+        browser = getattr(self.http, "browser", None)
+        if browser is None:
+            raise FetchError("warehouse per-store stock needs the browser backend")
+        wanted = {s for s in store_ids if s != IN_STORES}
+        regions = sorted({self._region_of[s] for s in wanted if s in self._region_of}) or sorted(
+            {s["region_code"] for s in self._stores})
+        if not regions:
+            return {}
+        page_url = f"{BASE}/p/x/{quote(sku)}.html"
+        page = await browser.visit(self.policy, page_url, success_js=PAGE_RESOLVED_JS)
+        widget_url = widget_store_url(page, sku)
+        if not widget_url:
+            raise FetchError(f"GET {page_url}: no store-availability widget for {sku}")
+        widget_text = await browser.fetch_text(self.policy, BASE, widget_url, WIDGET_HEADERS)
+        region_urls = parse_store_regions(widget_text)
+        stock: dict[str, Stock] = {}
+        for code in regions:
+            url = region_urls.get(code)
+            if not url:
+                continue
+            try:
+                text = await browser.fetch_text(self.policy, BASE, url, WIDGET_HEADERS)
+            except FetchError as exc:
+                log.info("warehouse: region %s for %s failed: %s", code, sku, exc)
+                continue
+            stock.update(parse_store_levels(text))
+        return {sid: stock[sid] for sid in wanted if sid in stock} if wanted else stock
 
     def parse_ref(self, ref: str) -> str:
         m = _SKU_IN_URL.search(ref)

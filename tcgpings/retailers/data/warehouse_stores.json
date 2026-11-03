@@ -1,0 +1,614 @@
+{
+  "_source": "https://www.thewarehouse.co.nz/on/demandware.store/Sites-twl-Site/default/Stores-FindStores?showMap=false&radius=2000&postalCode=0610 (captured 2026-11-03)",
+  "_note": "store_id is the numeric ID from Stores-FindStores, matching the region payload's c-full-store-details-<id>. region_code is stateCode (NZ-AUK, etc.) and is the value used in /products/stores/region?region=...",
+  "stores": [
+    {
+      "store_id": "221",
+      "name": "Auckland Central",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Atrium on Elliott, 21 Elliott Street, Auckland Central, Auckland 1010",
+      "phone": "09 213 0002"
+    },
+    {
+      "store_id": "113",
+      "name": "Newmarket",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 74 Broadway, Newmarket, Auckland 1023",
+      "phone": "09 523 1995"
+    },
+    {
+      "store_id": "187",
+      "name": "St Lukes",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Wagener Shopping Centre, 7 Wagener Place, Mount Albert, Auckland 1025",
+      "phone": "09 846 9534"
+    },
+    {
+      "store_id": "188",
+      "name": "Royal Oak",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 100 Pah Road, Royal Oak, Auckland 1023",
+      "phone": "09 625 9560"
+    },
+    {
+      "store_id": "192",
+      "name": "Mt Roskill",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 22 Stoddard Road, Wesley, Auckland 1041",
+      "phone": "09 629 0627"
+    },
+    {
+      "store_id": "190",
+      "name": "Mt Wellington Lunn Ave",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Stoneridge on Lunn, 101 Lunn Ave, Mount Wellington, Auckland 1072",
+      "phone": "09 217 7661"
+    },
+    {
+      "store_id": "210",
+      "name": "Glenfield",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Glenfield Mall, 40 Downing Street, Glenfield, Auckland 0629",
+      "phone": "09 443 1020"
+    },
+    {
+      "store_id": "186",
+      "name": "Sylvia Park",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Sylvia Park, 286 Mount Wellington Highway, Mount Wellington, Auckland 1060",
+      "phone": "09 985 0510"
+    },
+    {
+      "store_id": "107",
+      "name": "New Lynn",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 13 Rata Street, New Lynn, Auckland 0600",
+      "phone": "09 827 6939"
+    },
+    {
+      "store_id": "207",
+      "name": "Henderson Lincoln Rd",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Lincoln Road, 111 Lincoln Road, Henderson, Auckland 0610",
+      "phone": "09 836 6011"
+    },
+    {
+      "store_id": "103",
+      "name": "Henderson West City",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse West City Shopping Centre, 30 Railside Avenue, Henderson, Auckland 0612",
+      "phone": "09 836 3892"
+    },
+    {
+      "store_id": "208",
+      "name": "Westgate",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Westgate Shopping Centre, 12 Maki Street, Westgate, Auckland 0814",
+      "phone": "09 833 4417"
+    },
+    {
+      "store_id": "119",
+      "name": "Albany",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Albany Mega Centre, 140 Don McKinnon Drive, Albany, Auckland 0632",
+      "phone": "09 415 2225"
+    },
+    {
+      "store_id": "202",
+      "name": "Botany Downs",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Botany Town Centre, 501 Ti Rakau Drive, Northpark, Auckland 2013",
+      "phone": "09 273 1597"
+    },
+    {
+      "store_id": "209",
+      "name": "Auckland Airport",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Auckland Airport Shopping Centre, 1 John Goulter Drive, Auckland Airport, 2022, Auckland",
+      "phone": "09 275 0156"
+    },
+    {
+      "store_id": "405",
+      "name": "Manukau",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 54 Cavendish Drive, Manukau, Auckland 2104",
+      "phone": "09 262 1187"
+    },
+    {
+      "store_id": "195",
+      "name": "Ormiston",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Ormiston Town Centre, 226 Ormiston Road, Flat Bush, Auckland 2019",
+      "phone": "09 953 8392"
+    },
+    {
+      "store_id": "205",
+      "name": "Clendon",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Clendon Shopping Centre, 451 Roscommon Road, Clendon Park, Auckland 2103",
+      "phone": "09 267 1830"
+    },
+    {
+      "store_id": "193",
+      "name": "Takanini",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Takanini Village, 30 Walters Road, Takanini, Auckland 2112",
+      "phone": "09 215 0260"
+    },
+    {
+      "store_id": "191",
+      "name": "Silverdale",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse Silverdale Centre, 61 Silverdale Street, Silverdale, Auckland 0932",
+      "phone": "09 421 0481"
+    },
+    {
+      "store_id": "111",
+      "name": "Pukekohe",
+      "region": "Auckland",
+      "region_code": "NZ-AUK",
+      "address": "The Warehouse, 124 Manukau Road, Pukekohe, Auckland 2120",
+      "phone": "09 237 1225"
+    },
+    {
+      "store_id": "196",
+      "name": "Warkworth",
+      "region": "Warkworth",
+      "region_code": "NZ-AUK",
+      "address": "Kowhai Falls, 68 Woodcocks Road, Warkworth, Warkworth 0910",
+      "phone": "09 955 7094"
+    },
+    {
+      "store_id": "149",
+      "name": "Thames",
+      "region": "Thames",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse Goldfields Shopping Centre, 100 Mary Street, Thames, Thames 3500",
+      "phone": "07 868 9666"
+    },
+    {
+      "store_id": "189",
+      "name": "Whitianga",
+      "region": "Whitianga",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 24 Joan Gaskell Drive, Whitianga, Whitianga 3510",
+      "phone": "07 867 1978"
+    },
+    {
+      "store_id": "185",
+      "name": "Te Rapa",
+      "region": "Hamilton",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse Te Awa The Base, 401 Wairere Drive, Northgate, Hamilton 3200",
+      "phone": "07 850 6243"
+    },
+    {
+      "store_id": "157",
+      "name": "Morrinsville",
+      "region": "Morrinsville",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 47 Studholme Street, Morrinsville, Morrinsville 3300",
+      "phone": "07 889 0555"
+    },
+    {
+      "store_id": "141",
+      "name": "Hamilton",
+      "region": "Hamilton",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 130 Ward Street, Hamilton Central, Hamilton 3204",
+      "phone": "07 838 2088"
+    },
+    {
+      "store_id": "160",
+      "name": "Hillcrest",
+      "region": "Hamilton",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 265 Clyde Street, Hamilton East, Hamilton 3216",
+      "phone": "07 859 2019"
+    },
+    {
+      "store_id": "165",
+      "name": "Dargaville",
+      "region": "Dargaville",
+      "region_code": "NZ-NTL",
+      "address": "The Warehouse, 149 Victoria Street, Dargaville, Dargaville 0310",
+      "phone": "09 439 3120"
+    },
+    {
+      "store_id": "116",
+      "name": "Whangarei",
+      "region": "Whangarei",
+      "region_code": "NZ-NTL",
+      "address": "The Warehouse Okara Park Shopping Centre, 42 Port Road, Whangarei, Whangarei 0110",
+      "phone": "(09) 438 0346"
+    },
+    {
+      "store_id": "159",
+      "name": "Cambridge",
+      "region": "Cambridge",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 33 Wilson Street, Cambridge, Cambridge 3434",
+      "phone": "07 823 3588"
+    },
+    {
+      "store_id": "110",
+      "name": "Te Awamutu",
+      "region": "Te Awamutu",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 172 George Street, Te Awamutu, Te Awamutu 3800",
+      "phone": "07 870 2579"
+    },
+    {
+      "store_id": "154",
+      "name": "Matamata",
+      "region": "Matamata",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 41C Waharoa Road East, Matamata, Matamata 3400",
+      "phone": "07 888 4469"
+    },
+    {
+      "store_id": "222",
+      "name": "Tauranga Crossing",
+      "region": "Tauranga",
+      "region_code": "NZ-BOP",
+      "address": "The Warehouse Tauranga Crossing Shopping Mall, 2 Taurikura Drive, Tauriko, 3110, Tauranga",
+      "phone": "07 925 0058"
+    },
+    {
+      "store_id": "163",
+      "name": "Tauranga Fraser Cove",
+      "region": "Tauranga",
+      "region_code": "NZ-BOP",
+      "address": "The Warehouse Fraser Cove Shopping Centre, 241 Fraser Street, Tauranga South, 3112, Tauranga",
+      "phone": "07 578 2813"
+    },
+    {
+      "store_id": "156",
+      "name": "Papamoa",
+      "region": "Papamoa",
+      "region_code": "NZ-BOP",
+      "address": "The Warehouse Papamoa Plaza, 7 Gravatt Road, Papamoa Beach, Papamoa 3118",
+      "phone": "07 572 0052"
+    },
+    {
+      "store_id": "168",
+      "name": "Te Kuiti",
+      "region": "Te Kuiti",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 27 Rora Street, Te Kuiti, Te Kuiti 3910",
+      "phone": "07 878 1124"
+    },
+    {
+      "store_id": "147",
+      "name": "Tokoroa",
+      "region": "Tokoroa",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 8 Torphin Crescent, Tokoroa, Tokoroa 3420",
+      "phone": "07 886 9865"
+    },
+    {
+      "store_id": "204",
+      "name": "Kaikohe",
+      "region": "Kaikohe",
+      "region_code": "NZ-NTL",
+      "address": "The Warehouse, 17 Station Road, Kaikohe, Kaikohe 0405",
+      "phone": "09 405 2507"
+    },
+    {
+      "store_id": "142",
+      "name": "Rotorua",
+      "region": "Rotorua",
+      "region_code": "NZ-BOP",
+      "address": "The Warehouse Rotorua Central, 1128 Amohau Street, Rotorua, Rotorua 3010",
+      "phone": "07 346 3710"
+    },
+    {
+      "store_id": "169",
+      "name": "Waipapa",
+      "region": "Waipapa",
+      "region_code": "NZ-NTL",
+      "address": "The Warehouse, 8 Klinac Lane, Waipapa, Waipapa 0230",
+      "phone": "09 401 7430"
+    },
+    {
+      "store_id": "155",
+      "name": "Whakatane",
+      "region": "Whakatane",
+      "region_code": "NZ-BOP",
+      "address": "The Warehouse, 31 Kakahoroa Drive, Whakatane, Whakatane 3120",
+      "phone": "07 308 7132"
+    },
+    {
+      "store_id": "148",
+      "name": "Taupo",
+      "region": "Taupo",
+      "region_code": "NZ-WKO",
+      "address": "The Warehouse, 11 Taniwha Street, Taupo, Taupo 3330",
+      "phone": "07 377 0630"
+    },
+    {
+      "store_id": "117",
+      "name": "Kaitaia",
+      "region": "Kaitaia",
+      "region_code": "NZ-NTL",
+      "address": "The Warehouse, 2 North Park Drive, Kaitaia, Kaitaia 0410",
+      "phone": "09 408 6095"
+    },
+    {
+      "store_id": "164",
+      "name": "Bell Block",
+      "region": "New Plymouth",
+      "region_code": "NZ-TKI",
+      "address": "The Warehouse, 26 Bell Block Court, Bell Block, New Plymouth 4312",
+      "phone": "06 755 4201"
+    },
+    {
+      "store_id": "144",
+      "name": "New Plymouth",
+      "region": "New Plymouth",
+      "region_code": "NZ-TKI",
+      "address": "The Warehouse, 67 Courtenay Street, New Plymouth, New Plymouth 4310",
+      "phone": "06 759 8232"
+    },
+    {
+      "store_id": "140",
+      "name": "Hawera",
+      "region": "Hawera",
+      "region_code": "NZ-TKI",
+      "address": "The Warehouse, 275 High Street, Hawera, Hawera 4610",
+      "phone": "06 278 5771"
+    },
+    {
+      "store_id": "145",
+      "name": "Whanganui",
+      "region": "Whanganui",
+      "region_code": "NZ-MWT",
+      "address": "The Warehouse Trafalgar Square Shopping Centre, 100 Taupo Quay, Whanganui, 4500",
+      "phone": "06 348 0171"
+    },
+    {
+      "store_id": "152",
+      "name": "Napier",
+      "region": "Napier",
+      "region_code": "NZ-HKB",
+      "address": "The Warehouse, 319 Hastings Street, Napier South, Napier 4110",
+      "phone": "06 835 2433"
+    },
+    {
+      "store_id": "153",
+      "name": "Gisborne",
+      "region": "Gisborne",
+      "region_code": "NZ-GIS",
+      "address": "The Warehouse, 80 Customhouse Street, Gisborne, Gisborne 4010",
+      "phone": "06 868 6260"
+    },
+    {
+      "store_id": "151",
+      "name": "Hastings",
+      "region": "Hastings",
+      "region_code": "NZ-HKB",
+      "address": "The Warehouse, 620 Karamu Road North, Hastings, Hastings 4122",
+      "phone": "06 876 6682"
+    },
+    {
+      "store_id": "158",
+      "name": "Feilding",
+      "region": "Feilding",
+      "region_code": "NZ-MWT",
+      "address": "The Warehouse, 101 Kimbolton Road, Feilding, Feilding 4702",
+      "phone": "06 323 0444"
+    },
+    {
+      "store_id": "161",
+      "name": "Dannevirke",
+      "region": "Dannevirke",
+      "region_code": "NZ-MWT",
+      "address": "The Warehouse, 6 High Street, Dannevirke, Dannevirke 4930",
+      "phone": "06 374 9155"
+    },
+    {
+      "store_id": "146",
+      "name": "Palmerston North",
+      "region": "Palmerston North",
+      "region_code": "NZ-MWT",
+      "address": "The Warehouse, 171 Church Street, West End, Palmerston North 4412",
+      "phone": "06 356 7134"
+    },
+    {
+      "store_id": "137",
+      "name": "Levin",
+      "region": "Levin",
+      "region_code": "NZ-MWT",
+      "address": "The Warehouse, 2 Bristol Street, Levin, Levin 5510",
+      "phone": "06 368 1552"
+    },
+    {
+      "store_id": "135",
+      "name": "Paraparaumu",
+      "region": "Paraparaumu",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse Coastlands Centre, 6 Ihakara Street, Paraparaumu, Paraparaumu 5032",
+      "phone": "04 298 2056"
+    },
+    {
+      "store_id": "136",
+      "name": "Masterton",
+      "region": "Masterton",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse, 370 Queen Street, Masterton, Masterton 5810",
+      "phone": "06 377 0485"
+    },
+    {
+      "store_id": "132",
+      "name": "Porirua",
+      "region": "Porirua",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse, 64 Parumoana Street, Porirua City Centre, Porirua 5022",
+      "phone": "04 237 7801"
+    },
+    {
+      "store_id": "138",
+      "name": "Upper Hutt",
+      "region": "Upper Hutt",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse The Mall, 84 Queen Street, Upper Hutt, Upper Hutt 5018",
+      "phone": "04 527 7402"
+    },
+    {
+      "store_id": "139",
+      "name": "Lower Hutt",
+      "region": "Lower Hutt",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse Queensgate Shopping Centre, 55 Knights Road, Hutt Central, Lower Hutt 5010",
+      "phone": "04 566 5466"
+    },
+    {
+      "store_id": "131",
+      "name": "Petone",
+      "region": "Lower Hutt",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse, 14 Annie Huggan Grove, Petone, Lower Hutt 5012",
+      "phone": "04 576 9240"
+    },
+    {
+      "store_id": "170",
+      "name": "Lyall Bay",
+      "region": "Wellington",
+      "region_code": "NZ-WGN",
+      "address": "The Warehouse Wellington Airport Retail Park, 10 George Bolt Street, Rongotai, 6022, Wellington",
+      "phone": "04 387 4260"
+    },
+    {
+      "store_id": "182",
+      "name": "Motueka",
+      "region": "Motueka",
+      "region_code": "NZ-TAS",
+      "address": "The Warehouse, 270 High Street, Motueka, Motueka 7120",
+      "phone": "03 528 1079"
+    },
+    {
+      "store_id": "126",
+      "name": "Nelson",
+      "region": "Nelson",
+      "region_code": "NZ-TAS",
+      "address": "The Warehouse, 23 St Vincent Street, Nelson, Nelson 7010",
+      "phone": "03 548 1535"
+    },
+    {
+      "store_id": "211",
+      "name": "Richmond",
+      "region": "Nelson",
+      "region_code": "NZ-TAS",
+      "address": "The Warehouse Upper Queen, 186 Queen Street, Richmond, Nelson 7020",
+      "phone": "03 970 2945"
+    },
+    {
+      "store_id": "173",
+      "name": "Blenheim",
+      "region": "Blenheim",
+      "region_code": "NZ-MBH",
+      "address": "The Warehouse, 8 Redwood Street, Blenheim, Blenheim 7201",
+      "phone": "03 577 8762"
+    },
+    {
+      "store_id": "174",
+      "name": "Greymouth",
+      "region": "Greymouth",
+      "region_code": "NZ-WTC",
+      "address": "The Warehouse, 174 Mawhera Quay, Greymouth, Greymouth 7805",
+      "phone": "03 768 9051"
+    },
+    {
+      "store_id": "180",
+      "name": "Rangiora",
+      "region": "Rangiora",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse, 11 High Street, Rangiora, Rangiora 7400",
+      "phone": "03 313 0414"
+    },
+    {
+      "store_id": "120",
+      "name": "Papanui",
+      "region": "Christchurch",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse Northlands Shopping Centre, 21 Sawyers Arms Road, Northcote, Christchurch 8052",
+      "phone": "03 352 3111"
+    },
+    {
+      "store_id": "123",
+      "name": "Linwood - Eastgate",
+      "region": "Christchurch",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse Eastgate Mall, 20 Buckleys Road, Linwood, Christchurch 8062",
+      "phone": "03 389 2004"
+    },
+    {
+      "store_id": "220",
+      "name": "Riccarton",
+      "region": "Christchurch",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse, 265 Blenheim Road, Upper Riccarton, Christchurch 8041",
+      "phone": "(03) 348 6500"
+    },
+    {
+      "store_id": "178",
+      "name": "Spreydon - Barrington",
+      "region": "Christchurch",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse Barrington Mall, 256 Barrington Street, Spreydon, Christchurch 8024",
+      "phone": "03 337 4427"
+    },
+    {
+      "store_id": "128",
+      "name": "Hornby",
+      "region": "Christchurch",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse The Hub, 45 Chalmers Street, Hornby, Christchurch 8042",
+      "phone": "03 349 5389"
+    },
+    {
+      "store_id": "122",
+      "name": "Rolleston",
+      "region": "Rolleston",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse Rolleston Square, 5 Masefield Drive, Rolleston, Rolleston 7614",
+      "phone": "03 347 3506"
+    },
+    {
+      "store_id": "176",
+      "name": "Ashburton",
+      "region": "Ashburton",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse, 10 Kermode Street, Ashburton, Ashburton 7700",
+      "phone": "03 308 8746"
+    },
+    {
+      "store_id": "127",
+      "name": "Timaru",
+      "region": "Timaru",
+      "region_code": "NZ-CAN",
+      "address": "The Warehouse, 11 Victoria Street, Parkside, Timaru 7910",
+      "phone": "03 688 5588"
+    }
+  ]
+}

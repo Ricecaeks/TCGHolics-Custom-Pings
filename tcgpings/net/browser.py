@@ -94,6 +94,58 @@ class BrowserFetcher:
                 raise FetchError(f"GET {url}: HTTP {status}", status)
         raise Blocked(f"GET {url}: blocked by bot protection")
 
+    async def visit(
+        self,
+        policy: NetPolicy,
+        url: str,
+        *,
+        success_js: str | None = None,
+        timeout_ms: int = 30_000,
+        settle_ms: int = 500,
+    ) -> str:
+        """Load `url` in the session's page and return the fully-resolved HTML.
+
+        The site's managed challenge (Cloudflare "managed" / Turnstile) auto-solves in a clean,
+        genuine Chrome; we don't need to interact with the checkbox. `success_js` is a predicate
+        evaluated after each `goto` / wait tick: when it returns `True` we stop and hand back the
+        resolved DOM. `settle_ms` is a short extra sleep after success, for sites that swap the
+        DOM one tick after the check.
+
+        Raises FetchError if the site never resolves within `timeout_ms`.
+        """
+        await self.limiter.acquire(policy.retailer_id, BROWSER_EGRESS, policy.requests_per_minute)
+        # Use the session whose origin matches the URL, else a new one
+        origin = url.split("/")[2]
+        session = await self._session(policy.retailer_id, origin)
+        async with session.lock:
+            session.last_used = time.monotonic()
+            page = session.page
+            deadline = time.monotonic() + timeout_ms / 1000
+            await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            # If no success_js is given, a single tick is enough for pages that don't run a
+            # managed challenge: the DOM is already the final page.
+            while True:
+                if success_js is None:
+                    break
+                try:
+                    ok = await page.evaluate(f"() => !!({success_js})")
+                except Exception:  # noqa: BLE001 - any page error (closed/crashed mid-navigation) means not ready yet; retry
+                    ok = False
+                if ok:
+                    break
+                if time.monotonic() > deadline:
+                    raise FetchError(
+                        f"GET {url}: challenge did not resolve within {timeout_ms // 1000}s "
+                        f"(last title: {await page.title()!r})"
+                    )
+                await asyncio.sleep(0.5)
+            if settle_ms:
+                await asyncio.sleep(settle_ms / 1000)
+            html = await page.content()
+            session.warmed = True  # already on the right origin, warmed up; subsequent fetches skip _warm
+            session.last_used = time.monotonic()
+            return html
+
     async def _session(self, retailer_id: str, origin: str) -> _Session:
         existing = self._sessions.get(retailer_id)
         if existing is not None:
