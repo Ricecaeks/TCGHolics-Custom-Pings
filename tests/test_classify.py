@@ -70,6 +70,11 @@ def test_matches_query_is_accent_and_case_insensitive():
     # Kmart
     ("Pokemon TCG: Ultra Pro 9-Pocket Pages", None, False),
     ("Pokemon Trading Card Game: Mega Evolution Pitch Black Booster Bundle", None, True),
+    # Collectors Guild titles Delta Reign preorders by the set name alone, some with an acrylic case
+    ("Delta Reign Booster Bundle & 3 Pack Blister Bundle (Limit 1, Pick-Up, Pre-Order)", None, True),
+    ("Delta Reign Booster Box & Guilded Acrylic Case Bundle (Limit 1, Pick-Up, Pre-Order)", None, True),
+    ("Pokemon Acrylic Display Case", None, False),
+    ("Pokemon Acrylic Stand - Pikachu", None, False),
 ])
 def test_is_sealed_product(title, franchise, expected):
     from tcgpings.classify import is_sealed_product
@@ -94,6 +99,11 @@ def test_is_sealed_product(title, franchise, expected):
         ("**PRE-ORDER** MTG Play Booster Box - Star Trek", False),
         ("Pokemon TCG 30th Celebration Booster Bundle - 2 per Customer", False),
         ("Pokemon Trading Card Game: 30th Celebration Pokemon ex Box - Assorted", False),
+        ("Tireless Tracker (Extended Art) (308) (Commander: Star Trek) (TRC)", True),
+        ("Mountain (0566) (Surge Foil) (566) (Star Trek) (TRK)", True),
+        ("Biorhythm (Surge Foil) (Secret Lair Countdown Kit) (SLC)", True),
+        ("Star Trek Collector Booster Box (TRK)", False),
+        ("Delta Reign Booster Bundle & 3 Pack Blister Bundle (Limit 1, Pick-Up, Pre-Order)", False),
     ],
 )
 def test_is_single_card(title, single):
@@ -102,7 +112,10 @@ def test_is_single_card(title, single):
     assert is_single_card(title) is single
 
 
-@pytest.mark.parametrize("title", ["One Piece Weekly Play - 19 Nov 2026", "Riftbound - Radiance Draft - 22 Nov 2026"])
+@pytest.mark.parametrize("title", [
+    "One Piece Weekly Play - 19 Nov 2026", "Riftbound - Radiance Draft - 22 Nov 2026",
+    "One Piece Tournament Wed 12th August 6:30pm", "Delta Reign Pre-Release Thursday Oct 29 2026 @ 6:30PM Mt Roskill",
+])
 def test_store_events_are_not_card_products(title):
     from tcgpings.classify import is_card_product
 

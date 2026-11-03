@@ -3,7 +3,10 @@
 import re
 
 FRANCHISES: dict[str, re.Pattern] = {
-    "pokemon": re.compile(r"pok[eé]mon|\bptcg\b|\bpkm\b", re.I),
+    # Some card shops title preorders with the set name alone ("Delta Reign Booster Bundle").
+    "pokemon": re.compile(
+        r"pok[eé]mon|\bptcg\b|\bpkm\b|mega\s*evolution|delta\s*reign|ascended\s*heroes|phantasmal\s*flames|"
+        r"perfect\s*order", re.I),
     "one_piece": re.compile(r"\bone\s*piece\b", re.I),
     "riftbound": re.compile(r"\briftbound\b", re.I),
     "mtg": re.compile(r"magic:?\s*the\s*gathering|\bmtg\b", re.I),
@@ -39,19 +42,23 @@ PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
 
 # Franchise merchandise that isn't sealed card product.
 NON_CARD = re.compile(
-    r"plush|figure|acrylic|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|\bmega\s+pok|puzzle|"
+    r"plush|figure|acrylic(?!.*\bbundle\b)|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|\bmega\s+pok|puzzle|"
     r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*n\W*go|surprise\s*attack|battle\s*game|"
     r"bandolier|monopoly|guess\s*who|"
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d|"
-    r"socks|trunks|trainers|wrapping|gift\s*bag|\blamp\b|alarm\s*clock|comforter|\bthrow\b|christmas\s*cards|ticket",
+    r"socks|trunks|trainers|wrapping|gift\s*bag|\blamp\b|alarm\s*clock|comforter|\bthrow\b|christmas\s*cards|ticket|"
+    r"\b\d{1,2}(?::\d{2})?\s*[ap]m\b",  # a store event's start time: "Tournament Wed 12th August 6:30pm"
     re.I,
 )
 
 # Single cards: collector numbers "(199/165)" / "199/165" / "065a/167", set codes "[JUSH-EN040]" / "OP09-118" /
 # "[VEN - 034/166]" / "- Radiance R04a", and a card shop's trailing set name "Stingcaster Mage [Reality Fracture]".
+# Also MTG singles in round brackets: "Tireless Tracker (Extended Art) (308) (Commander: Star Trek) (TRC)",
+# "Biorhythm (Surge Foil) (Secret Lair Countdown Kit) (SLC)".
 # Sealed titles use short codes ("Vault Bundle [RAD]") or a notice ("[Pre-Order]").
 SINGLE_CARD = re.compile(
+    r"\(\d{1,4}[a-z]?\)\s*\(|\)\s*\([A-Z0-9]{3,5}\)\s*$|"
     r"\(\s*\d{1,4}\s*/\s*\d{1,4}\s*\)|\b[A-Z]{0,2}\d{1,3}[a-z*]?/\d{2,3}\b|\b[A-Z0-9]{2,5}-[A-Z]{0,2}\d{3}\b|"
     r"\[[A-Z0-9]{2,5}\s*-\s*\d{1,4}[^\]]*\]|\s-\s.*\b[A-Z]\d{2}[a-z]?$|"
     r"\[(?!(?i:pre-?\s*order|limit|sale|new\b))[^\]]*[a-z ][^\]]*\]\s*$"
