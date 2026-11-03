@@ -139,6 +139,22 @@ async def test_a_store_stock_failure_keeps_the_listings_and_backs_off():
     assert a._store_failures == 0
 
 
+async def test_a_short_block_keeps_the_last_store_counts_instead_of_the_islands():
+    from tcgpings.retailers.kmart import ISLANDS_AFTER_SECONDS
+
+    http = FakeHttp()
+    a = KmartAdapter(ROW, http)
+    await a.discover()
+    a._next_store_check, http.fail = 0, FetchError("POST: HTTP 429", 429)
+    blocked = {p.sku: p for p in await a.discover()}
+    assert blocked["43788798"].stores is None  # the stores keep their last counts
+
+    a._store_ok_at -= ISLANDS_AFTER_SECONDS
+    a._next_store_check = 0
+    stale = {p.sku: p for p in await a.discover()}
+    assert set(stale["43788798"].stores) == {"NI", "SI"}
+
+
 def test_alert_lists_store_counts():
     event = Event(type=EventType.RESTOCK, retailer_id="kmart", sku="x", title="Pokemon Bundle", url="https://x",
                   store_id="*1", store_name="2 stores", old_level="out", new_level="in", new_qty=3,

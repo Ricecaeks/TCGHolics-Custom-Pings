@@ -54,6 +54,8 @@ ALL_OF_NZ = {"lat": "-41.0", "lon": "174.0", "distance": "2000km", "limit": 100}
 BATCH = 100  # products per request; 85 is the most the category has had
 STORE_CHECK_SECONDS = 15 * 60
 STORE_BACKOFF_LIMIT = 6 * 3600
+# A short block keeps the last store counts; the islands only stand in once they're this stale.
+ISLANDS_AFTER_SECONDS = 2 * 3600
 
 _SKU_IN_URL = re.compile(r"(\d{7,9})/?$")
 _NZ_SUFFIX = re.compile(r"\s+nz$", re.I)
@@ -128,6 +130,7 @@ class KmartAdapter(RetailerAdapter):
         self._stores: list[dict] = []
         self._next_store_check = 0.0
         self._store_failures = 0
+        self._store_ok_at = float("-inf")
 
     async def _constructor(self, path: str, keep_islands: bool = False, **params: str) -> list[Product]:
         data = await self.http.get_json(self.policy, f"{CONSTRUCTOR}{path}", params={**self._cio, **params})
@@ -163,8 +166,9 @@ class KmartAdapter(RetailerAdapter):
                 log.warning("kmart: store stock unavailable, next try in %d min: %s", wait // 60, exc)
             else:
                 self._store_failures = 0
-                self._next_store_check = time.monotonic() + STORE_CHECK_SECONDS
-        if not self._store_failures:  # islands are only for when store stock is unavailable
+                self._store_ok_at = time.monotonic()
+                self._next_store_check = self._store_ok_at + STORE_CHECK_SECONDS
+        if time.monotonic() - self._store_ok_at < ISLANDS_AFTER_SECONDS:  # islands only when store stock is down
             for product in products:
                 product.stores = (counts or {}).get(product.sku)
         return products
