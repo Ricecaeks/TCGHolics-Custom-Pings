@@ -36,6 +36,7 @@ FAILURE_COOLDOWN = 30 * 60
 class Backend(Protocol):
     name: str
     paid: bool
+    posts: bool  # can send a POST body (a JSON API rather than a page)
 
     async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None) -> tuple[str, float]: ...
 
@@ -45,6 +46,7 @@ class BrowserBackend:
 
     name = "browser"
     paid = False
+    posts = False
 
     def __init__(self, fetcher: Any) -> None:
         self.fetcher = fetcher
@@ -159,8 +161,11 @@ class FetchChain:
         return await self.budget_used() >= self.low_ratio
 
     async def fetch_text(
-        self, policy: NetPolicy, origin: str, url: str, headers: dict | None = None, order: list[str] | None = None
+        self, policy: NetPolicy, origin: str, url: str, headers: dict | None = None, order: list[str] | None = None,
+        body: str | None = None,
     ) -> str:
+        """GET `url`, or POST `body` to it, through the first route that gets through."""
+        method = "GET" if body is None else "POST"
         routes = self.available(order or list(self.backends))
         if not routes:
             raise FetchError(f"{policy.retailer_id}: no fetch route configured (browser or unblocker key)")
@@ -168,6 +173,9 @@ class FetchChain:
         rid = policy.retailer_id
         for name in routes:
             backend = self.backends[name]
+            if body is not None and not getattr(backend, "posts", False):
+                skipped.append(f"{name} can't POST")
+                continue
             if await self.store.is_open(rid, name):
                 skipped.append(f"{name} resting")
                 continue
@@ -177,7 +185,10 @@ class FetchChain:
             if backend.paid:
                 await self.limiter.acquire(rid, name, policy.requests_per_minute)
             try:
-                text, cost = await backend.fetch(policy, origin, url, headers)
+                if body is None:
+                    text, cost = await backend.fetch(policy, origin, url, headers)
+                else:
+                    text, cost = await backend.fetch(policy, origin, url, headers, body=body)
             except Blocked as exc:
                 rest = self.cooldowns.unblocker_blocked if backend.paid else self.cooldowns.browser_blocked
                 log.warning("%s: %s blocked, resting it %d min: %s", rid, name, rest // 60, exc)
@@ -203,7 +214,7 @@ class FetchChain:
             if name != routes[0]:
                 log.info("%s: served by %s (%s)", rid, name, ", ".join(skipped))
             return text
-        raise Blocked(f"GET {url}: no route got through ({', '.join(skipped)})")
+        raise Blocked(f"{method} {url}: no route got through ({', '.join(skipped)})")
 
     async def close(self) -> None:
         for backend in self.backends.values():

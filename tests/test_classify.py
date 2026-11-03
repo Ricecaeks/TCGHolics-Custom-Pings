@@ -63,6 +63,7 @@ def test_matches_query_is_accent_and_case_insensitive():
     ("Disney Lorcana Series 5 Shimmering Skies Deck Box - Aladdin", None, False),  # accessory, not a deck
     ("4D Build Pokémon Model Kit - Eevee", None, False),
     ("Pokemon Clip N Go Chimchar & Repeat Ball", None, False),
+    ("Pokemon Clip And Go Jigglypuff with Moon Ball", None, False),
     ("Pokemon Surprise Attack Poke Ball Battle Game Larvitar & Scorbunny", None, False),
     ("MEGA Pokémon - Vulpix Evolution Set", None, False),
     ("Pokemon TCG Mega Evolution Elite Trainer Box", None, True),
@@ -86,6 +87,8 @@ def test_is_sealed_product(title, franchise, expected):
     "title, single",
     [
         ("Stingcaster Mage [Reality Fracture]", True),
+        ("PSA 10 Japanese Pokémon CLL Clefairy", True),
+        ("Pokemon TCG Mega Evolution Elite Trainer Box - Mega Lucario ex", False),
         ("Q, Stacking the Deck (Showcase) (Surge Foil) [Star Trek]", True),
         ("Traveling Chocobo (Borderless) (Chocobo Track Foil) [FINAL FANTASY]", True),
         ("Resonating Strike [VEN - 034/166]", True),

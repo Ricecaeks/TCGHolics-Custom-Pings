@@ -1,5 +1,6 @@
 """Kmart adapter: Constructor listings (fixture trimmed from the live Trading Cards browse)."""
 
+import json
 import time
 
 from conftest import load_fixture
@@ -68,15 +69,18 @@ class FakeResponse:
 
 
 class FakeHttp:
-    def __init__(self, fail=None):
+    def __init__(self, fail=None, chain=None):
         self.asked = []
         self.fail = fail
+        self.chain = chain
+        self.direct_calls = 0
 
     async def get_json(self, policy, url, **kw):
         return load_fixture("kmart", "browse.json")
 
     async def request(self, policy, method, url, json=None, **kw):
         assert (method, url) == ("POST", "https://api.kmart.co.nz/gateway/graphql")
+        self.direct_calls += 1
         if self.fail:
             raise self.fail
         if json["operationName"] == "getNearestLocations":
@@ -85,6 +89,26 @@ class FakeHttp:
         self.asked.append(form["postcode"])
         return FakeResponse(answer([{"keycode": p["keycode"], "locations": BY_POSTCODE[form["postcode"]]}
                                     for p in form["products"]]))
+
+
+class FakeChain:
+    """The fetch chain's unblockers: answers the same gateway POSTs, as text."""
+
+    def __init__(self, routes=("scrapfly", "zyte"), fail=None):
+        self.routes = list(routes)
+        self.fail = fail
+        self.posts = []
+
+    def available(self, order):
+        return [r for r in order if r in self.routes]
+
+    async def fetch_text(self, policy, origin, url, headers=None, order=None, body=None):
+        assert url == "https://api.kmart.co.nz/gateway/graphql" and headers["Content-Type"] == "application/json"
+        if self.fail:
+            raise self.fail
+        payload = json.loads(body)
+        self.posts.append((payload["operationName"], order))
+        return json.dumps((await FakeHttp().request(policy, "POST", url, json=payload)).json())
 
 
 async def test_store_list_is_real_stores_and_gets_synced():
@@ -128,12 +152,12 @@ async def test_a_store_stock_failure_keeps_the_listings_and_backs_off():
     assert all(set(p.stores or {}) <= {"NI", "SI"} for p in await a.discover())  # still waiting, so nothing was asked
     assert http.asked == []
 
-    a._next_store_check = 0
+    a._next_store_check = a._direct_after = 0
     http.fail = FetchError("POST: HTTP 429", 429)
     await a.discover()
     assert a._next_store_check - time.monotonic() > first_wait * 1.9
 
-    a._next_store_check = 0
+    a._next_store_check = a._direct_after = 0
     http.fail = None
     assert any(p.stores for p in await a.discover())
     assert a._store_failures == 0
@@ -179,8 +203,47 @@ async def test_islands_cover_only_in_store_products_and_only_while_store_stock_i
     assert a.store_label("NI") == "North Island"
     assert down["43818273"].stores is None  # sold online, so its flags can include warehouse stock
 
-    a._next_store_check, http.fail = 0, None
+    a._next_store_check = a._direct_after = 0
+    http.fail = None
     up = {p.sku: p for p in await a.discover()}
     assert "NI" not in up["43788798"].stores and "8229" in up["43788798"].stores
 
     assert all(p.stores is None for p in await a.search("pokemon"))
+
+
+async def test_a_refused_sweep_goes_through_the_unblockers_and_ours_rest():
+    chain = FakeChain()
+    http = FakeHttp(fail=FetchError("POST: HTTP 429", 429), chain=chain)
+    a = KmartAdapter(ROW, http)
+    products = {p.sku: p for p in await a.discover()}
+    assert products["43818617"].stores["8229"].qty == 10  # real store counts, not the islands
+    assert {op for op, _ in chain.posts} == {"getNearestLocations", "getProductAvailability"}
+    assert chain.posts[0][1] == ["scrapfly"]
+    assert 29 * 60 < a._next_store_check - time.monotonic() <= 30 * 60
+    assert a._direct_after > time.monotonic()
+
+    a._next_store_check, calls = 0, http.direct_calls
+    await a.discover()
+    assert http.direct_calls == calls  # ours are still resting, so the unblockers answered alone
+
+    a._next_store_check = a._direct_after = 0
+    http.fail = None
+    posts = len(chain.posts)
+    await a.discover()
+    assert len(chain.posts) == posts and a._store_failures == 0  # ours work again: no paid requests
+
+
+async def test_unblockers_failing_too_keeps_the_last_counts_and_tries_again_soon():
+    http = FakeHttp(fail=FetchError("POST: HTTP 429", 429), chain=FakeChain(fail=FetchError("no route got through")))
+    a = KmartAdapter(ROW, http)
+    a._store_ok_at = time.monotonic()  # counts from a moment ago
+    products = await a.discover()
+    assert all(p.stores is None for p in products)
+    assert a._next_store_check - time.monotonic() <= 30 * 60
+
+
+async def test_no_unblocker_configured_falls_back_as_before():
+    http = FakeHttp(fail=FetchError("POST: HTTP 429", 429), chain=FakeChain(routes=()))
+    a = KmartAdapter(ROW, http)
+    await a.discover()
+    assert a._next_store_check == a._direct_after
