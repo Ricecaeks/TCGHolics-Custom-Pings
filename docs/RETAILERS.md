@@ -29,7 +29,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - Stock is IN/OUT only, because Shopify doesn't expose inventory counts publicly.
 - When a single card's title doesn't name the game, the game is taken from the product type or tags.
 - Verified live on 2026-10-29 against cardmerchant.co.nz and ironknightgaming.co.nz.
-- Shops monitored: Card Merchant and Iron Knight Gaming (added by hand), plus ten shops that listed Delta Reign in Zephyr's alert history (migration `008_delta_reign_shops.sql`, feeds checked 2026-11-04): Game Corner, OCARE, Aniverse, PLAYX, Card Masters, Kidzstuffonline, The Game Tree, Game Roost, Collectors Guild and Toy Time. The other NZ card shops worth adding are listed in `reports/NZ Pokemon TCG retailers.md`.
+- Shops monitored: Card Merchant and Iron Knight Gaming (added by hand), plus ten shops that listed Delta Reign in Zephyr's alert history (added with `admin add-shopify` on 2026-11-04 after their feeds answered): Game Corner, OCARE, Aniverse, PLAYX, Card Masters, Kidzstuffonline, The Game Tree, Game Roost, Collectors Guild and Toy Time. The other NZ card shops worth adding are listed in `reports/NZ Pokemon TCG retailers.md`.
 - Shopify's bot check answers `429` to plain HTTP clients; the bot's browser-like client (curl_cffi impersonating Chrome) gets the JSON.
 
 ## Farmers (recon 2026-10-29)
