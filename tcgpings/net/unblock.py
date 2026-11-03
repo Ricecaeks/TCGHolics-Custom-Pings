@@ -56,8 +56,11 @@ class ScrapFlyBackend:
     posts = True
 
     def __init__(self, api_key: str, country: str = "nz", usd_per_credit: float = 0.00015,
-                 cost_budget: int = 0, node_name: str = "node", session: Any = None) -> None:
+                 cost_budget: int = 0, node_name: str = "node", session: Any = None,
+                 project_keys: dict[str, str] | None = None) -> None:
         self.api_key = api_key
+        # Retailer id -> the key of that retailer's own ScrapFly project; others use `api_key`.
+        self.project_keys = project_keys or {}
         self.country = country
         self.usd_per_credit = usd_per_credit
         self.cost_budget = cost_budget
@@ -74,7 +77,7 @@ class ScrapFlyBackend:
 
     def params(self, policy: NetPolicy, url: str, headers: dict | None) -> dict[str, str]:
         params = {
-            "key": self.api_key, "url": url, "unblocker": "true", "proxified_response": "true",
+            "key": self.project_keys.get(policy.retailer_id) or self.api_key, "url": url, "unblocker": "true", "proxified_response": "true",
             "session": f"tcgpings-{self.node_name}-{policy.retailer_id}",
         }
         if self.country:
