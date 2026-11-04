@@ -26,6 +26,8 @@
          "routes": [{"retailer": "paperplus"}]},
         {"name": "whitcoulls", "topic": "Whitcoulls online and in-store",
          "routes": [{"retailer": "whitcoulls"}]},
+        {"name": "mighty-ape-hobby-store", "topic": "Mighty Ape trading cards online",
+         "routes": [{"retailer": "mightyape"}]},
         {"name": "card-shop-sites", "topic": "NZ card shops online",
          "routes": [{"adapter": "shopify"}, {"retailer": "retrospace"}]}
       ]

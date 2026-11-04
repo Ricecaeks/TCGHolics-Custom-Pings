@@ -41,6 +41,9 @@ class RetailerAdapter(ABC):
     # Discovery: a cheap scan of the retailer's whole TCG range (category listing / newest
     # products), run on a timer for every enabled retailer whether or not anything is watched.
     supports_discovery: ClassVar[bool] = False
+    # Whether keyword watches search this retailer. Off where every request is paid (Mighty Ape): its
+    # discovery scans have to do.
+    supports_search: ClassVar[bool] = True
     default_discover_interval: ClassVar[int | None] = None
 
     def __init__(self, retailer: Any, http: HttpClient) -> None:

@@ -203,3 +203,10 @@ def test_prerelease_kits_are_still_sealed(title):
     from tcgpings.classify import is_sealed_product
 
     assert is_sealed_product(title)
+
+
+def test_a_bracketed_deck_code_is_not_a_card_number():
+    from tcgpings.classify import is_sealed_product, is_single_card
+
+    assert is_sealed_product("One Piece TCG - Learn Together Deck [LT-01]")
+    assert is_single_card("Ultra Rare [VEN - 034/166]")
