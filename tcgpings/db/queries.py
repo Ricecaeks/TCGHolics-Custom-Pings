@@ -278,6 +278,18 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
 # --- products & state ------------------------------------------------------------------
 
 
+async def mark_announced(db: DB, retailer_id: str, sku: str) -> None:
+    await db.execute("UPDATE products SET announced_at = now() WHERE retailer_id = $1 AND sku = $2", retailer_id, sku)
+
+
+async def announced_within(db: DB, retailer_id: str, sku: str, seconds: int) -> bool:
+    """Was this product announced as a new listing in the last `seconds`?"""
+    return bool(await db.fetchval(
+        "SELECT announced_at > now() - make_interval(secs => $3) FROM products WHERE retailer_id = $1 AND sku = $2",
+        retailer_id, sku, seconds,
+    ))
+
+
 async def upsert_product(db: DB, p: Product) -> bool:
     """Returns True when the product was seen for the first time.
 

@@ -292,3 +292,41 @@ async def test_spotted_report_tags_matching_members_and_posts_once(pool):
     assert ping["payload"]["extra"]["pings"] == [{"keywords": "30th westgate", "users": [1]}]
     assert await pipe.report(row, event) == 0  # a second report of the same thing
     assert await queries.list_member_pings(pool, 1)
+
+
+def store_product(level=Level.IN, qty=4):
+    return Product("farmers", "30th-bb", "Pokemon TCG 30th Celebration Booster Bundle", "https://x/30th",
+                   online=Stock(Level.OUT))
+
+
+async def test_a_new_drop_already_on_the_shelf_alerts_in_store(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    events = await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.IN, 4)}, {"albany": "Albany"},
+                               announce_new=True)
+    assert sorted(e.type.value for e in events) == ["new_product", "restock"]
+    [shelf] = [e for e in events if e.store_id == "albany"]
+    assert (shelf.new_level, shelf.new_qty, shelf.old_level) == ("in", 4, None)
+    # a later store check (JB Hi-Fi and Toyworld check stores separately) still counts as the drop
+    later = await pipe.record(RETAILER, store_product(), {"henderson": Stock(Level.LOW, 1)}, {"henderson": "Henderson"})
+    assert [(e.type.value, e.store_id) for e in later] == [("restock", "henderson")]
+    # and the next reading is an ordinary diff again
+    assert await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.IN, 5)}) == []
+
+
+async def test_first_store_readings_of_a_baseline_product_stay_silent(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    assert await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.IN, 4)}, announce_new=False) == []
+    assert await pipe.record(RETAILER, store_product(), {"henderson": Stock(Level.IN, 2)}) == []
+    [gone] = await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.OUT, 0)})
+    assert gone.type.value == "out_of_stock"
+    [back] = await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.IN, 6)})
+    assert back.type.value == "restock" and back.old_level == "out"
+
+
+async def test_an_announced_product_out_of_stock_in_store_is_quiet(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    events = await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.OUT, 0)}, announce_new=True)
+    assert [e.type.value for e in events] == ["new_product"]

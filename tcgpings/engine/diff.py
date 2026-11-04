@@ -38,6 +38,14 @@ def new_product_event(product: Product) -> Event:
     )
 
 
+def first_store_stock_event(product: Product, store_id: str, store_name: str | None, stock: Stock) -> Event:
+    """A brand-new product's first reading at a store, already in stock: a new drop on the shelf."""
+    return _event(
+        EventType.RESTOCK, product, store_id, store_name,
+        new_level=stock.level.value, new_qty=stock.qty,
+    )
+
+
 def diff_state(
     product: Product,
     store_id: str,

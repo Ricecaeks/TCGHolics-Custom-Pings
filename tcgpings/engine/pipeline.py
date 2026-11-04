@@ -15,11 +15,15 @@ import asyncpg
 
 from tcgpings.classify import classify, is_single_card
 from tcgpings.db import queries
-from tcgpings.engine.diff import diff_state, new_product_event
+from tcgpings.engine.diff import diff_state, first_store_stock_event, new_product_event
 from tcgpings.engine.router import RouteCache, match_member_pings, match_routes
 from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, Level, Product, Stock
 
 log = logging.getLogger(__name__)
+
+# A product announced as a new listing this recently alerts on its first in-store reading too. Store checks
+# can come hours after discovery (JB Hi-Fi, Toyworld), and a new drop is often in-store only (Kmart).
+NEW_DROP_SECONDS = 24 * 3600
 
 
 def classify_product(product: Product) -> Product:
@@ -48,8 +52,11 @@ class Pipeline:
         events: list[Event] = []
         async with self.pool.acquire() as conn, conn.transaction():
             is_new = await queries.upsert_product(conn, product)
+            announced: bool | None = None  # looked up only when a store reports stock for the first time
             if is_new and announce_new:
                 events.append(new_product_event(product))
+                await queries.mark_announced(conn, product.retailer_id, product.sku)
+                announced = True
 
             if product.online and product.online.level is not Level.UNKNOWN:
                 prev = await queries.apply_state(
@@ -64,6 +71,15 @@ class Pipeline:
                     continue
                 prev = await queries.apply_state(conn, product.retailer_id, product.sku, store_id, stock, None)
                 name = (store_names or {}).get(store_id, store_id)
+                if prev is None and stock.level.available:
+                    # A first reading is normally a silent baseline (a new watch or retailer doesn't flood
+                    # channels), but not for a product just announced as new: that's a drop on the shelf.
+                    if announced is None:
+                        announced = await queries.announced_within(
+                            conn, product.retailer_id, product.sku, NEW_DROP_SECONDS)
+                    if announced:
+                        events.append(first_store_stock_event(product, store_id, name, stock))
+                    continue
                 events += diff_state(product, store_id, name, prev, stock, None)
 
             if events:

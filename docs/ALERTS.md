@@ -149,7 +149,7 @@ Matching ignores case and accents ("pokemon" matches "Pokémon"). Words match fr
 | `price_change` | online price changes | on |
 | `out_of_stock` | in stock → out | **off** (add `events:out_of_stock` to opt in) |
 
-The first scan of a new retailer or watch is a silent baseline, so adding things never floods channels. Repeat alerts for the same product, store and state are suppressed for 15 minutes.
+The first scan of a new retailer or watch is a silent baseline, so adding things never floods channels. The exception is a brand-new product: if it was announced as a new listing in the last 24 hours, its first in-store reading that shows stock posts as an in-store restock, so a drop that's only on shelves (common at Kmart) still reaches `-instore` and `-store-restocks` channels. Repeat alerts for the same product, store and state are suppressed for 15 minutes.
 
 ## Store-level tracking
 
