@@ -27,7 +27,14 @@ from typing import Any
 
 from curl_cffi.requests import AsyncSession, RequestsError
 
-from tcgpings.net.http import Blocked, FetchError, NetPolicy, looks_like_ban_page
+from tcgpings.net.http import (
+    Blocked,
+    FetchError,
+    NetPolicy,
+    Queued,
+    looks_like_ban_page,
+    looks_like_queue_page,
+)
 
 SCRAPFLY_URL = "https://api.scrapfly.io/scrape"
 ZYTE_URL = "https://api.zyte.com/v1/extract"
@@ -42,7 +49,9 @@ class ProviderError(FetchError):
         self.cooldown = cooldown
 
 
-def _check_target(url: str, status: int, text: str, method: str = "GET") -> str:
+def _check_target(url: str, status: int, text: str, method: str = "GET", detect_queue: bool = False) -> str:
+    if detect_queue and looks_like_queue_page(text):  # checked first: a waiting room can look like a block
+        raise Queued(f"{method} {url}: waiting room (HTTP {status})", status or 200)
     if status in (403, 429) or looks_like_ban_page(text):
         raise Blocked(f"{method} {url}: HTTP {status} (blocked)")
     if status != 200:
@@ -54,6 +63,7 @@ class ScrapFlyBackend:
     name = "scrapfly"
     paid = True
     posts = True
+    options = True  # takes the per-request `country` and `detect_queue` options
 
     def __init__(self, api_key: str, country: str = "nz", usd_per_credit: float = 0.00015,
                  cost_budget: int = 0, node_name: str = "node", session: Any = None,
@@ -75,13 +85,13 @@ class ScrapFlyBackend:
             self._session = AsyncSession(timeout=TIMEOUT)
         return self._session
 
-    def params(self, policy: NetPolicy, url: str, headers: dict | None) -> dict[str, str]:
+    def params(self, policy: NetPolicy, url: str, headers: dict | None, country: str | None = None) -> dict[str, str]:
         params = {
             "key": self.project_keys.get(policy.retailer_id) or self.api_key, "url": url, "unblocker": "true", "proxified_response": "true",
             "session": f"tcgpings-{self.node_name}-{policy.retailer_id}",
         }
-        if self.country:
-            params["country"] = self.country
+        if country or self.country:
+            params["country"] = (country or self.country).lower()
         if self.cost_budget:
             params["cost_budget"] = str(self.cost_budget)
         for name, value in (headers or {}).items():
@@ -89,16 +99,17 @@ class ScrapFlyBackend:
         return params
 
     async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None,
-                    body: str | None = None) -> tuple[str, float]:
+                    body: str | None = None, country: str | None = None, detect_queue: bool = False,
+                    ) -> tuple[str, float]:
         lock = self._locks.setdefault(policy.retailer_id, asyncio.Lock())
         async with lock:
             try:
                 if body is None:
-                    resp = await self.session.get(SCRAPFLY_URL, params=self.params(policy, url, headers))
+                    resp = await self.session.get(SCRAPFLY_URL, params=self.params(policy, url, headers, country))
                 else:
                     content_type = next((v for k, v in (headers or {}).items() if k.lower() == "content-type"),
                                         "application/json")
-                    resp = await self.session.post(SCRAPFLY_URL, params=self.params(policy, url, headers),
+                    resp = await self.session.post(SCRAPFLY_URL, params=self.params(policy, url, headers, country),
                                                    data=body, headers={"Content-Type": content_type})
             except RequestsError as exc:
                 raise FetchError(f"scrapfly: {exc}") from exc
@@ -106,7 +117,7 @@ class ScrapFlyBackend:
         reject = resp.headers.get("x-scrapfly-reject-code")
         if reject:
             raise self._reject_error(resp.status_code, reject)
-        return _check_target(url, resp.status_code, resp.text, "GET" if body is None else "POST"), cost
+        return _check_target(url, resp.status_code, resp.text, "GET" if body is None else "POST", detect_queue), cost
 
     @staticmethod
     def _reject_error(status: int, code: str) -> FetchError:
@@ -128,6 +139,7 @@ class ZyteBackend:
     name = "zyte"
     paid = True
     posts = True
+    options = True  # takes the per-request `country` and `detect_queue` options
 
     def __init__(self, api_key: str, geolocation: str = "", usd_per_request: float = 0.00127,
                  session: Any = None) -> None:
@@ -142,20 +154,23 @@ class ZyteBackend:
             self._session = AsyncSession(timeout=TIMEOUT)
         return self._session
 
-    def body(self, url: str, headers: dict | None, post: str | None = None) -> dict[str, Any]:
+    def body(self, url: str, headers: dict | None, post: str | None = None, country: str | None = None,
+             ) -> dict[str, Any]:
         body: dict[str, Any] = {"url": url, "httpResponseBody": True}
         if post is not None:
             body.update(httpRequestMethod="POST", httpRequestText=post)
         if headers:
             body["customHttpRequestHeaders"] = [{"name": k, "value": v} for k, v in headers.items()]
-        if self.geolocation:
-            body["geolocation"] = self.geolocation.upper()
+        if country or self.geolocation:
+            body["geolocation"] = (country or self.geolocation).upper()
         return body
 
     async def fetch(self, policy: NetPolicy, origin: str, url: str, headers: dict | None,
-                    body: str | None = None) -> tuple[str, float]:
+                    body: str | None = None, country: str | None = None, detect_queue: bool = False,
+                    ) -> tuple[str, float]:
         try:
-            resp = await self.session.post(ZYTE_URL, json=self.body(url, headers, body), auth=(self.api_key, ""))
+            resp = await self.session.post(ZYTE_URL, json=self.body(url, headers, body, country),
+                                           auth=(self.api_key, ""))
         except RequestsError as exc:
             raise FetchError(f"zyte: {exc}") from exc
         status = resp.status_code
@@ -173,7 +188,7 @@ class ZyteBackend:
         data = resp.json()
         text = base64.b64decode(data.get("httpResponseBody") or "").decode("utf-8", errors="replace")
         method = "GET" if body is None else "POST"
-        return _check_target(url, int(data.get("statusCode") or 200), text, method), self.usd_per_request
+        return _check_target(url, int(data.get("statusCode") or 200), text, method, detect_queue), self.usd_per_request
 
     async def close(self) -> None:
         if self._session is not None:

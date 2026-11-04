@@ -14,6 +14,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
 | Mighty Ape | `mightyape` | — (online only) | **live via ScrapFly** (Pokémon category every 30 min, all trading cards hourly: first page of each, about 2,000 credits a day). No keyword searches. No add-to-cart link |
+| Pokémon Center NZ / AU / UK | `pokemoncenter` | — (online only) | **live via Zyte** (sealed TCG range newest-first: page 1 every 3 min for NZ and 10 min for AU/UK, every page when the in-stock count changes and every 6 h; queue detection). No keyword searches. AU and UK are `overseas` |
 | Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
 | Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
 | Retrospace | `retrospace` | — (online only) | **live** (card game categories + newest cards, search, price, online stock with unit counts; a product leaving its category counts as sold out). No add-to-cart link |
@@ -66,6 +67,17 @@ DataDome answers 403 (a CAPTCHA page) to every page with product data: shop, sea
 - robots.txt disallows search (`?q=`) and sorting (`order_by`), so discovery reads the first page of each category in its default "featured" order, where new sets and preorders sit near the top.
 - SKU = the product URL slug (`kogan-international-pokemon-tcg-pitch-black-booster-pack-41201033`).
 - Keyword watches skip it (`supports_search = False`): every request costs credits.
+
+## Pokémon Center (recon 2026-11-05)
+
+DataDome on every page, and the site serves the store for the visitor's **country**, whatever the URL says: a US address asking for `/en-nz/…` gets the US store in USD. The owner approved a paid-unblocker test on 2026-11-05.
+- **ScrapFly:** for pokemoncenter.com it only allows US exits (`ERR::SCRAPE::COUNTRY_NOT_AVAILABLE_FOR_TARGET`), so it can't reach the NZ, AU or UK stores.
+- **Zyte** with `geolocation` NZ / AU / GB: the right store (en-NZ / en-AU / en-GB, NZD / AUD / GBP) in 3–40 seconds. The adapter passes the country per request (`fetch_text(country=…)`).
+- Category pages are Next.js. `__NEXT_DATA__ → props.initialState.search.results` holds `_raw.response.docs` (32 a page: `pid`, `title`, `price`/`sale_price`, `launch_date`, `availability_status` IN_STOCK / OUT_OF_STOCK, images), `total`, and an `availability_status` facet counting the **whole category's** in-stock products. Product links (`/en-nz/product/<pid>/<slug>`) are in the HTML. Product pages have a JSON-LD `Product` with `offers.availability`.
+- Category paths are flat: `/en-nz/category/tcg-cards` (sealed: booster packs, boxes, tins, ETBs, decks; 303 products in NZ and AU, 590 in the UK), `tcg-accessories`, `30th-celebration`. `?sort=launch_date%2Bdesc` sorts newest first and `&page=N` pages.
+- On 2026-11-05 every sealed product in NZ and AU was out of stock (newest: Mega Charizard X ex Ultra-Premium Collection, July 2026). The UK had the 30th Celebration mini tins listed (sold out). The NZ 30th Celebration category is plush, clothing and sleeves.
+- **Queue:** during big drops the store holds shoppers in an Imperva waiting room. With `detect_queue` the fetch chain raises `Queued` when a page reads like a waiting room ("waiting room", "you are in line", Queue-it…), and the adapter turns that into a `queue` alert. The exact wording of the store's waiting room hasn't been seen yet: any page that is neither the store nor a recognised waiting room is logged (`unexpected page …`) so the markers can be tuned after the first real drop.
+- **Cost** (Zyte, estimated at $0.00127 a request): NZ page 1 every 3 min (480 a day), AU and UK every 10 min (144 a day each), full sweeps every 6 h and when the in-stock count changes (about 150 a day): roughly 900 requests, about US$1.20 a day. Each row's `every` and `sweep_every` (seconds) are in its config.
 
 ## Farmers (recon 2026-10-29)
 

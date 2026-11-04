@@ -49,6 +49,8 @@ class Pipeline:
         announce_new: bool = False,
     ) -> list[Event]:
         classify_product(product)
+        if product.kind == "queue":
+            return await self._record_queue(retailer, product)
         events: list[Event] = []
         async with self.pool.acquire() as conn, conn.transaction():
             is_new = await queries.upsert_product(conn, product)
@@ -86,6 +88,21 @@ class Pipeline:
                 await self._enqueue(conn, retailer, events)
         return events
 
+    async def _record_queue(self, retailer: Any, product: Product) -> list[Event]:
+        """A shop's waiting room, kept as a status row: alert when it turns on (IN), quietly note when it's off."""
+        events: list[Event] = []
+        async with self.pool.acquire() as conn, conn.transaction():
+            await queries.upsert_product(conn, product)
+            prev = await queries.apply_state(conn, product.retailer_id, product.sku, ONLINE, product.online, None)
+            changes = diff_state(product, ONLINE, None, prev, product.online, None)
+            for event in changes:
+                if event.type is EventType.RESTOCK:
+                    event.type = EventType.QUEUE
+                    events.append(event)
+            if events:
+                await self._enqueue(conn, retailer, events)
+        return events
+
     async def report(self, retailer: Any, event: Event) -> int:
         """Queue an event nobody observed through a stock check. Returns how many alerts were queued."""
         async with self.pool.acquire() as conn, conn.transaction():
@@ -98,6 +115,8 @@ class Pipeline:
         per_route: dict[int, tuple[Any, list[Event]]] = {}
         for event in events:
             event.extra.update(retailer_name=retailer["name"], retailer_color=retailer["color"])
+            if is_overseas(retailer):
+                event.extra["overseas"] = True
             matched = match_routes(routes, event)
             if not matched:
                 log.debug("no route for %s %s %s", event.type, event.retailer_id, event.store_id or "online")
@@ -118,6 +137,15 @@ class Pipeline:
                 key = f"{event.dedupe_key(bucket)}#{route_id}"
                 queued += await queries.enqueue_alert(conn, key, route_id, payload)
         return queued
+
+
+def is_overseas(retailer: Any) -> bool:
+    """A store outside NZ (Pokémon Center AU/UK): its alerts only reach channels that name it."""
+    try:
+        config = retailer["config"]
+    except (KeyError, TypeError):
+        return False
+    return bool(isinstance(config, dict) and config.get("overseas"))
 
 
 def merge_store_events(events: list[Event]) -> list[Event]:

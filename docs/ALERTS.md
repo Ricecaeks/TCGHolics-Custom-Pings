@@ -21,7 +21,10 @@ Which channel gets which alerts is written down in [`tcgpings/discord/layout.jso
 | `#pokemon-online-shops` / `#onepiece-online-shops` | that game in stock **online**, any retailer: new listings and restocks |
 | `#pokemon-store-restocks` / `#onepiece-store-restocks` | that game in stock **at a physical store**, any retailer, plus member sightings |
 | `#pokemon-jb-hifi` | Pokémon at JB Hi-Fi |
+| `#pokemon-center-nz` / `-au` / `-uk` | that Pokémon Center store: sealed TCG listings, restocks and queue alerts |
 | `#lorcana-alerts`, `#magic-alerts`, `#riftbound-alerts`, `#dragonball-alerts`, `#yugioh-alerts`, `#gundam-alerts` | that game anywhere: new listings, restocks, sightings |
+
+**Overseas stores** (Pokémon Center AU and UK) only post in channels that name them. They stay out of the game channels, the catch-all and member `/ping`s, because they don't ship to NZ.
 
 To change it, edit `layout.json` (each route takes `retailer` or `adapter`, `store`: online/instore, `game`, `events`, `keywords`, `role`, `in_stock`) and deploy. `CHANNEL_LAYOUT=false` turns it off.
 
@@ -148,6 +151,7 @@ Matching ignores case and accents ("pokemon" matches "Pokémon"). Words match fr
 | `qty_change` | stock goes up, or Low ↔ In | on |
 | `price_change` | online price changes | on |
 | `out_of_stock` | in stock → out | **off** (add `events:out_of_stock` to opt in) |
+| `queue` | a shop turns its waiting room on (Pokémon Center during big drops) | on (also in `#pokemon-online-shops`) |
 
 The first scan of a new retailer or watch is a silent baseline, so adding things never floods channels. The exception is a brand-new product: if it was announced as a new listing in the last 24 hours, its first in-store reading that shows stock posts as an in-store restock, so a drop that's only on shelves (common at Kmart) still reaches `-instore` and `-store-restocks` channels. Repeat alerts for the same product, store and state are suppressed for 15 minutes.
 
