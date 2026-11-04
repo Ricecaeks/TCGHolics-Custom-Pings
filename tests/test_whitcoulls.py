@@ -1,5 +1,7 @@
 """Whitcoulls: search JSON and product JSON-LD (fixtures trimmed from the live site 2026-11-04)."""
 
+import json
+
 from conftest import load_fixture
 
 from tcgpings.models import Level
@@ -79,3 +81,16 @@ def test_parse_ref_and_store_label():
     assert a.parse_ref("https://www.whitcoulls.co.nz/disney-lorcana-gateway-6981870") == "6981870"
     assert a.parse_ref("6981870") == "6981870"
     assert a.matches_url("https://www.whitcoulls.co.nz/x-1") and a.store_label(IN_STORES) == "Stores nationwide"
+
+
+def test_books_and_figures_are_not_card_products():
+    def item(sku, title, category):
+        return {"description": title, "stylecolour": {
+            "stylecolourid": sku, "urlkey": f"x-{sku}", "attributes": {"sapcategorycode": category},
+            "variants": [{"unitprice": "29.99", "status": ""}]}}
+    items = [item("1", "Pokemon Encyclopedia: Horizons Edition", "57-01020510"),
+             item("2", "Pokemon Select 30th Anniversary Glitter Battle Figure", "57-050503"),
+             item("3", "Pokemon TCG 30th Celebration Booster Bundle", "57-040599"),
+             item("4", "Magic The Gathering - Marvel Super Heroes Beginner Box", "57-040109")]
+    page = "<script>window.category = {...%s};</script>" % json.dumps({"items": items})
+    assert [p.sku for p in parse_search(page)] == ["3", "4"]

@@ -35,6 +35,11 @@ IN_STORES = "in-stores"
 IN_STORES_NAME = "Stores nationwide"
 IN_STORES_ONLY = "In stores, not online"
 
+# Whitcoulls' category codes for trading cards and Magic. Its Pokémon results are mostly books
+# (57-0102...), figures (57-0505...) and board games (57-040103), which titles alone can't rule out.
+CARD_CATEGORIES = ("57-040101", "57-040109")
+_CARD_TITLE = re.compile(r"\btcg\b|trading card|card game|booster|elite trainer", re.I)
+
 STATUS = {"": Level.IN, "limitedstock": Level.LOW, "instore": Level.OUT, "outofstock": Level.OUT}
 AVAILABILITY = {"instock": Level.IN, "limitedavailability": Level.LOW, "preorder": Level.IN, "backorder": Level.IN,
                 "outofstock": Level.OUT, "soldout": Level.OUT, "instoreonly": Level.OUT, "discontinued": Level.OUT}
@@ -45,7 +50,7 @@ _ID_IN_URL = re.compile(r"-(\d{5,})/?$")
 
 
 def parse_search(page: str, retailer_id: str = "whitcoulls") -> list[Product]:
-    """Search page -> products, from its embedded `window.category` JSON."""
+    """Search page -> card products, from its embedded `window.category` JSON."""
     start = page.find("window.category = {")
     if start < 0:
         return []
@@ -60,12 +65,16 @@ def parse_search(page: str, retailer_id: str = "whitcoulls") -> list[Product]:
         sku = str(style.get("stylecolourid") or variant.get("barcode") or "")
         if not sku:
             continue
+        category = (style.get("attributes") or {}).get("sapcategorycode")
+        title = html.unescape(item.get("description") or "").strip()
+        if category and category not in CARD_CATEGORIES and not _CARD_TITLE.search(title):
+            continue  # a book, figure or board game
         status = variant.get("status") or ""
         image = (style.get("primaryimage") or {}).get("src")
         products.append(Product(
             retailer_id=retailer_id,
             sku=sku,
-            title=html.unescape(item.get("description") or "").strip(),
+            title=title,
             url=f"{BASE}/{style['urlkey']}" if style.get("urlkey") else f"{BASE}/x-{sku}",
             image=image,
             price_cents=to_cents(variant.get("unitprice")),

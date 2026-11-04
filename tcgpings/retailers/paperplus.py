@@ -29,6 +29,10 @@ log = logging.getLogger(__name__)
 
 BASE = "https://www.paperplus.co.nz"
 TRADING_CARDS = "toys-games-puzzles/collectables-trading-cards/trading-cards"
+# Tiles name a category, but loosely (a Pokémon booster can be "Toys, Games & Puzzles"), so a tile is
+# kept if it's in Trading Cards or its title says it's cards. Drops books and 30th Anniversary plush.
+CARD_CATEGORY = "Trading Cards"
+_CARD_TITLE = re.compile(r"\btcg\b|trading card|card game|booster|elite trainer", re.I)
 GONE_AFTER_SCANS = 3  # a product must be missing this many scans in a row to count as sold out
 
 AVAILABILITY = {"instock": Level.IN, "limitedavailability": Level.LOW, "preorder": Level.IN, "backorder": Level.IN,
@@ -36,7 +40,7 @@ AVAILABILITY = {"instock": Level.IN, "limitedavailability": Level.LOW, "preorder
 
 _TILE = re.compile(r"<article .*?</article>", re.S)
 _ATTR = lambda name: re.compile(r"\b" + name + r'="([^"]*)"')  # noqa: E731
-_URL, _NAME, _PRICE = (_ATTR(n) for n in ("data-url", "data-name", "data-price"))
+_URL, _NAME, _PRICE, _CATEGORY = (_ATTR(n) for n in ("data-url", "data-name", "data-price", "data-category"))
 _IMAGE = re.compile(r"\bdata-src='([^']*)'")  # the lazy-loaded image, single-quoted
 _LD = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 _CANONICAL = re.compile(r'<link rel="canonical" href="([^"]+)"')
@@ -47,18 +51,22 @@ def _sku(path: str) -> str:
 
 
 def parse_tiles(page: str, retailer_id: str = "paperplus") -> list[Product]:
-    """Category or search page -> products. A listed product can be bought online."""
+    """Category or search page -> card products. A listed product can be bought online."""
     products = []
     for tile in _TILE.findall(page):
         url, name = _URL.search(tile), _NAME.search(tile)
         if not url or not name or not url.group(1).startswith("/shop/"):
             continue
+        title = " ".join(html.unescape(name.group(1)).split())
+        category = _CATEGORY.search(tile)
+        if not _CARD_TITLE.search(title) and not (category and html.unescape(category.group(1)) == CARD_CATEGORY):
+            continue  # a book, toy or plush
         price, image = _PRICE.search(tile), _IMAGE.search(tile)
         path = html.unescape(url.group(1))
         products.append(Product(
             retailer_id=retailer_id,
             sku=_sku(path),
-            title=" ".join(html.unescape(name.group(1)).split()),
+            title=title,
             url=BASE + path,
             image=html.unescape(image.group(1)).split("?")[0] if image else None,
             price_cents=to_cents(price.group(1)) if price else None,

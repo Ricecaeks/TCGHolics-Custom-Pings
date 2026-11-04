@@ -44,7 +44,7 @@ PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
 NON_CARD = re.compile(
     r"plush|figure|acrylic(?!.*\bbundle\b)|figurine|t-?shirt|hoodie|pyjama|costume|lego|mega\s*construx|\bmega\s+pok|puzzle|"
     r"model\s*kit|4d\s*build|build\s*(?:&|and)\s*show|clip\W*(?:n|and|&)\W*go|surprise\s*attack|battle\s*game|"
-    r"bandolier|monopoly|guess\s*who|"
+    r"bandolier|monopoly|guess\s*who|trainer\s*guess|"
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d|"
     r"socks|trunks|trainers|wrapping|gift\s*bag|\blamp\b|alarm\s*clock|comforter|\bthrow\b|christmas\s*cards|ticket|"
