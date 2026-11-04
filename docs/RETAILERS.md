@@ -14,8 +14,8 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
-| Whitcoulls | `whitcoulls` | to confirm | recon pending |
-| Paper Plus | `paperplus` | to confirm | recon pending |
+| Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
+| Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
 | ~~EB Games NZ~~ | — | — | dropped: stores have closed |
 
 ## Shopify (generic)
@@ -33,6 +33,19 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
   - Shuffle n Cut's newest products are almost all non-card, so it reads its sealed collections (`config.collections`). Otakumart and TCG Collector NZ list singles in bulk, so they read 2 pages (`discover_pages`).
   - Not Shopify: Retrospace (no `/products.json`). GameKings is Shopify but sells no cards. Shops that need a new adapter are listed in `reports/NZ Pokemon TCG retailers.md`.
 - Shopify's bot check answers `429` to plain HTTP clients; the bot's browser-like client (curl_cffi impersonating Chrome) gets the JSON.
+
+## Whitcoulls (recon 2026-11-04)
+
+Plain HTML, no bot protection. Search pages embed their results as JSON (`window.category = {...{"items": [...]}}`, 24 a page): product id (`stylecolourid`, also `/x-<id>` redirects to the product), `urlkey`, price, and `variants[0].status`: `""` in stock online, `limitedstock`, `instore` (In Store Only), `outofstock`. Product pages have JSON-LD `offers.availability`.
+- The card range is a few Yu-Gi-Oh!, Magic and Lorcana products; the "30th" seen in a Pokémon search was a 30th Anniversary figure, not cards. Discovery reads the searches "trading card", "booster" and "tcg". Searches can't be sorted or paged by URL, but each fits one page.
+- "In Store Only" items count as in stock at one "Stores nationwide" store, like The Warehouse.
+
+## Paper Plus (recon 2026-11-04)
+
+Plain HTML, no bot protection. Category and search pages are `<article>` tiles with `data-url`, `data-skucode` and a hidden span with `data-name` / `data-price`. Product pages have JSON-LD `offers.availability`.
+- Discovery reads the Trading Cards category (`/shop/toys-games-puzzles/collectables-trading-cards/trading-cards`, 12 products on one page in Nov 2026). Every listed product was in stock, so a product missing from the listing for 3 scans counts as sold out.
+- SKU = the path after `/shop/`: search can't find a product by barcode.
+- Not looked at yet: the product page's "Where in stock" button (per-store stock).
 
 ## Farmers (recon 2026-10-29)
 
