@@ -1,3 +1,5 @@
 # Importing each adapter module registers it in base.REGISTRY.
-from tcgpings.retailers import farmers, jbhifi, kmart, paperplus, shopify, toyworld, warehouse, whitcoulls  # noqa: F401
+from tcgpings.retailers import (  # noqa: F401
+    farmers, jbhifi, kmart, paperplus, retrospace, shopify, toyworld, warehouse, whitcoulls,
+)
 from tcgpings.retailers.base import REGISTRY, RetailerAdapter, build_adapter  # noqa: F401

@@ -138,3 +138,43 @@ def test_binder_collection_is_sealed_but_a_binder_is_not():
 ])
 def test_merchandise_and_event_tickets_are_not_card_products(title):
     assert not is_card_product(title)
+
+
+@pytest.mark.parametrize("title, franchise", [
+    # Titles from Game Roost, Card Masters, Otakumart, HobbiXchange and Retrospace (November 2026).
+    ("Gundam Card Game: Booster Pack - Dual Impact GD02", "gundam"),
+    ("PRE ORDER - Gundam Card Game: Booster Display –   [GD06]", "gundam"),
+    ("Gundam Card Game: Gundam Assemble – Premium Collection:  Iron Blooded Orphans PC01A", "gundam"),
+    ("Dragon Ball Super Card Game Fusion World Starter Deck Vegeta Mini [FS07]", "dragonball"),
+    ("Dragon Ball Super Card Game - Fusion World FB-11 Boosters", "dragonball"),
+    ("Dragon Ball Z Super The Dark Invasion Starter Deck Series 3 Cross Worlds", "dragonball"),
+    ("FB05 New Adventure Booster Pack Dragon Ball Super Sealed", "dragonball"),  # title + Shopify type
+])
+def test_gundam_and_dragon_ball_card_games(title, franchise):
+    from tcgpings.classify import franchise_of, is_sealed_product
+
+    assert franchise_of(title) == franchise and is_sealed_product(title)
+
+
+@pytest.mark.parametrize("title", [
+    "RG 1/144 UNICORN GUNDAM Model Kit", "MGSD Wing Gundam Zero EW Model Kit",
+    "GUNDAM - MASTER GRADE SD (MGSD) GUNDAM BARBATOS (On Sale)", "GUNDAM MOBILE SUIT ENSEMBLE -  Blind Box",
+    "Funko Pop! Plus Mobile Suit Gundam - Gundam Deathscythe Vinyl Figure",
+    "Dragon Ball Z - Cell (First Form) Bitty Pop! 4 Pack", "Funko Pop! Dragon Ball Z - Frieza Vinyl Figure",
+    "BANDAI - DRAGON BALL DAIMA MODEL KIT SON GOKU (MINI) & VEGETA (MINI)",
+    "Dragon Shield Halloween 2026 - Brushed Art Sleeves",
+    "Gundam Barbatos Lupus (GD03-050) - Steel Requiem Holofoil Gundam Card Game Single",  # a single
+])
+def test_gunpla_figures_and_singles_are_not_sealed_card_games(title):
+    from tcgpings.classify import is_sealed_product
+
+    assert not is_sealed_product(title)
+
+
+def test_retrospace_titles():
+    from tcgpings.classify import is_sealed_product
+
+    assert is_sealed_product("Pokemon Mega Evolution Pitch Black Zarude 2-Pack Blister [2 Booster Packs & Coin]")
+    assert not is_sealed_product("Yu-Gi-Oh! Jaden & Yubel Card Case")
+    assert not is_sealed_product("Yu-Gi-Oh! Jaden & Yubel Game Mat")
+    assert not is_sealed_product("Stingcaster Mage [Reality Fracture]")  # still a single

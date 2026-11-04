@@ -12,6 +12,13 @@ FRANCHISES: dict[str, re.Pattern] = {
     "mtg": re.compile(r"magic:?\s*the\s*gathering|\bmtg\b", re.I),
     "lorcana": re.compile(r"\blorcana\b", re.I),
     "yugioh": re.compile(r"yu-?\s*gi-?\s*oh", re.I),
+    # Most "Gundam" and "Dragon Ball" products are model kits and Funko figures, so these two need the
+    # card game named: "Gundam Card Game: Booster Display [GD06]", "Dragon Ball Super Card Game Fusion
+    # World ...", "Dragon Ball Z Super The Dark Invasion Starter Deck".
+    "gundam": re.compile(r"\bgundam\b.*\b(?:card|tcg)\b", re.I),
+    "dragonball": re.compile(
+        r"\bdragon\s*ball\b.*\b(?:card|tcg|booster|starter\s*deck|sealed)|\bfusion\s*world\b|\bdbs\s*(?:cg|card|tcg)\b",
+        re.I),
 }
 
 FRANCHISE_NAMES = {
@@ -21,10 +28,14 @@ FRANCHISE_NAMES = {
     "mtg": "Magic: The Gathering",
     "lorcana": "Lorcana",
     "yugioh": "Yu-Gi-Oh!",
+    "gundam": "Gundam Card Game",
+    "dragonball": "Dragon Ball Super",
 }
 
 # Sleeves, binders, deck boxes...: never "sealed product", even when a deck/box word also matches.
-ACCESSORY = re.compile(r"sleeves|binder(?!\s+collection)|deck\s*box|playmat|portfolio|toploader|pocket\s*pages|protector", re.I)
+ACCESSORY = re.compile(
+    r"sleeves|binder(?!\s+collection)|deck\s*box|playmat|game\s*mat|card\s*case|portfolio|toploader|pocket\s*pages|"
+    r"protector", re.I)
 
 # Checked in order: more specific types first.
 PRODUCT_TYPES: list[tuple[str, re.Pattern]] = [
@@ -56,13 +67,14 @@ NON_CARD = re.compile(
 # "[VEN - 034/166]" / "- Radiance R04a", and a card shop's trailing set name "Stingcaster Mage [Reality Fracture]".
 # Also MTG singles in round brackets: "Tireless Tracker (Extended Art) (308) (Commander: Star Trek) (TRC)",
 # "Biorhythm (Surge Foil) (Secret Lair Countdown Kit) (SLC)".
-# Sealed titles use short codes ("Vault Bundle [RAD]") or a notice ("[Pre-Order]").
+# Sealed titles use short codes ("Vault Bundle [RAD]"), a notice ("[Pre-Order]") or contents
+# ("Zarude 2-Pack Blister [2 Booster Packs & Coin]").
 SINGLE_CARD = re.compile(
     r"\b(?i:psa|bgs|cgc)\s*\d|"  # a graded card: "PSA 10 Japanese Pokémon CLL Clefairy"
     r"\(\d{1,4}[a-z]?\)\s*\(|\)\s*\([A-Z0-9]{3,5}\)\s*$|"
     r"\(\s*\d{1,4}\s*/\s*\d{1,4}\s*\)|\b[A-Z]{0,2}\d{1,3}[a-z*]?/\d{2,3}\b|\b[A-Z0-9]{2,5}-[A-Z]{0,2}\d{3}\b|"
     r"\[[A-Z0-9]{2,5}\s*-\s*\d{1,4}[^\]]*\]|\s-\s.*\b[A-Z]\d{2}[a-z]?$|"
-    r"\[(?!(?i:pre-?\s*order|limit|sale|new\b))[^\]]*[a-z ][^\]]*\]\s*$"
+    r"\[(?!(?i:pre-?\s*order|limit|sale|new\b|\d+\s*(?:x\s*)?(?:booster|pack)))[^\]]*[a-z ][^\]]*\]\s*$"
 )
 
 
