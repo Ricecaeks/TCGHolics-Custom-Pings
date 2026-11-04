@@ -16,6 +16,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
 | Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
 | Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
+| Retrospace | `retrospace` | — (online only) | **live** (card game categories + newest cards, search, price, online stock with unit counts; a product leaving its category counts as sold out). No add-to-cart link |
 | ~~EB Games NZ~~ | — | — | dropped: stores have closed |
 
 ## Shopify (generic)
@@ -31,7 +32,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 - Verified live on 2026-10-29 against cardmerchant.co.nz and ironknightgaming.co.nz.
 - Shops monitored: Card Merchant and Iron Knight Gaming (added by hand), plus ten shops that listed Delta Reign in Zephyr's alert history (added with `admin add-shopify` on 2026-11-04 after their feeds answered): Game Corner, OCARE, Aniverse, PLAYX, Card Masters, Kidzstuffonline, The Game Tree, Game Roost, Collectors Guild and Toy Time. Ten more added the same way later that day: Pop Stop, Mr Tofu, MetaLife, HobbiXchange, Otakumart, Hobby Zone, TCG Collector NZ, Animal Kingdoms, SecretRareVault and Shuffle n Cut.
   - Shuffle n Cut's newest products are almost all non-card, so it reads its sealed collections (`config.collections`). Otakumart and TCG Collector NZ list singles in bulk, so they read 2 pages (`discover_pages`).
-  - Not Shopify: Retrospace (no `/products.json`). GameKings is Shopify but sells no cards. Shops that need a new adapter are listed in `reports/NZ Pokemon TCG retailers.md`.
+  - Not Shopify: Retrospace (no `/products.json`; it has its own adapter, below). GameKings is Shopify but sells no cards. Shops that need a new adapter are listed in `reports/NZ Pokemon TCG retailers.md`.
 - Shopify's bot check answers `429` to plain HTTP clients; the bot's browser-like client (curl_cffi impersonating Chrome) gets the JSON.
 
 ## Whitcoulls (recon 2026-11-04)
@@ -46,6 +47,16 @@ Plain HTML, no bot protection. Category and search pages are `<article>` tiles w
 - Discovery reads the Trading Cards category (`/shop/toys-games-puzzles/collectables-trading-cards/trading-cards`, 12 products on one page in Nov 2026). Every listed product was in stock, so a product missing from the listing for 3 scans counts as sold out.
 - SKU = the path after `/shop/`: search can't find a product by barcode.
 - Not looked at yet: the product page's "Where in stock" button (per-store stock).
+
+## Retrospace (recon 2026-11-04)
+
+Christchurch collectibles shop on a custom site (Cactuslab), plain HTML, no bot protection. Zephyr pinged it for Pitch Black boosters in `#card-shop-sites`.
+- Listing tiles are `<li class="result-wrapper">`: product link, `<h2>` title, a stock label and a price. Labels: `2 in stock` (a count), `in stock`, `Pre-Order April 2027` (counted as in stock, label shown as a note), `Special Order (Ships in 2 weeks)` (the shop orders it in: counted as out).
+- A category page shows 20 tiles; its "load more" button calls `/<category slug>/more/?start=N&howMany=M`, which returns tiles alone, so one request reads a whole category.
+- Discovery reads the card categories (`pokemon-cards`, `magic-the-gathering-1`, `one-piece-card-game`, `yu-gi-oh-cards`, `dragonball-z-cards`, `riftbound-league-of-legends-tcg-in-stock`) plus the 60 newest tiles of `/cards/`. A product missing from its category for 3 scans counts as sold out.
+- Search is `/search.do?q=`; its category tiles and merchandise (mugs, figures) are skipped by path.
+- SKU = the product path (`games/pokemon-cards/<slug>`). Add-to-cart is a form POST with a CSRF token, so no link.
+- Live check 2026-11-04: 76 card products, 71 sealed (mostly Yu-Gi-Oh special orders; Pitch Black boosters and Zarude blister, Dragon Ball FB-11, Riftbound Vendetta in stock).
 
 ## Farmers (recon 2026-10-29)
 
