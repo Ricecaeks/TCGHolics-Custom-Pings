@@ -68,6 +68,8 @@ def plan_jobs(
                 continue
             key = f"search:{retailer_id}:{query}:{w['franchise'] or '*'}"
             cls = REGISTRY[by_id[retailer_id]["adapter"]]
+            if not cls.supports_search:
+                continue
             interval = w["interval_seconds"] or cls.default_search_interval or search_interval
             existing = jobs.get(key)
             if existing:

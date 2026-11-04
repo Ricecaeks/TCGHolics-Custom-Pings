@@ -13,7 +13,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
-| Mighty Ape | `mightyape` | — (online only) | recon pending (DataDome) |
+| Mighty Ape | `mightyape` | — (online only) | **live via ScrapFly** (Pokémon category every 30 min, all trading cards hourly: first page of each, about 2,000 credits a day). No keyword searches. No add-to-cart link |
 | Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
 | Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
 | Retrospace | `retrospace` | — (online only) | **live** (card game categories + newest cards, search, price, online stock with unit counts; a product leaving its category counts as sold out). No add-to-cart link |
@@ -57,6 +57,15 @@ Christchurch collectibles shop on a custom site (Cactuslab), plain HTML, no bot 
 - Search is `/search.do?q=`; its category tiles and merchandise (mugs, figures) are skipped by path.
 - SKU = the product path (`games/pokemon-cards/<slug>`). Add-to-cart is a form POST with a CSRF token, so no link.
 - Live check 2026-11-04: 76 card products, 71 sealed (mostly Yu-Gi-Oh special orders; Pitch Black boosters and Zarude blister, Dragon Ball FB-11, Riftbound Vendetta in stock).
+
+## Mighty Ape (recon 2026-11-05)
+
+DataDome answers 403 (a CAPTCHA page) to every page with product data: shop, search, `/api`, and the 5,551 product sitemaps. Only `robots.txt` and the sitemap index load. The owner approved ScrapFly for it on 2026-11-05.
+- Through ScrapFly (`unblocker=true`, NZ exit): 25–30 credits and 23–50 seconds a page.
+- Category pages (`/mn/shop/category/hobbies/trading-cards/`, `…/pokemon`, and one per game) carry a JSON-LD `ItemList` of 36 products: name, SKU (`MPE-…`), image, `AggregateOffer` with `lowPrice` (the Primate members' price), `highPrice` (regular) and availability (`InStock`, `PreOrder`, `OutOfStock`). Sold-out products stay listed. Product pages have a JSON-LD `Product`.
+- robots.txt disallows search (`?q=`) and sorting (`order_by`), so discovery reads the first page of each category in its default "featured" order, where new sets and preorders sit near the top.
+- SKU = the product URL slug (`kogan-international-pokemon-tcg-pitch-black-booster-pack-41201033`).
+- Keyword watches skip it (`supports_search = False`): every request costs credits.
 
 ## Farmers (recon 2026-10-29)
 

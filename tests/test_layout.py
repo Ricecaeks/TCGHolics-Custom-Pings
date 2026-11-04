@@ -57,7 +57,8 @@ def test_the_shipped_layout_parses():
     every = [retailer(r, a) for r, a in [("kmart", "kmart"), ("farmers", "farmers"), ("jbhifi", "jbhifi"),
                                          ("toyworld", "toyworld"), ("warehouse", "warehouse"),
                                          ("paperplus", "paperplus"), ("whitcoulls", "whitcoulls"),
-                                         ("retrospace", "retrospace"), ("card-merchant", "shopify")]]
+                                         ("retrospace", "retrospace"), ("mightyape", "mightyape"),
+                                         ("card-merchant", "shopify")]]
     parsed, problems = layout.parse(data, every)
     assert problems == []
     names = [s.name for s in parsed]

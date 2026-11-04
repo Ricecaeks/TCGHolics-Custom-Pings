@@ -76,7 +76,7 @@ SINGLE_CARD = re.compile(
     r"\b(?i:psa|bgs|cgc)\s*\d|"  # a graded card: "PSA 10 Japanese Pokémon CLL Clefairy"
     r"\(\d{1,4}[a-z]?\)\s*\(|\)\s*\([A-Z0-9]{3,5}\)\s*$|"
     r"\(\s*\d{1,4}\s*/\s*\d{1,4}\s*\)|\b[A-Z]{0,2}\d{1,3}[a-z*]?/\d{2,3}\b|\b[A-Z0-9]{2,5}-[A-Z]{0,2}\d{3}\b|"
-    r"\[[A-Z0-9]{2,5}\s*-\s*\d{1,4}[^\]]*\]|\s-\s.*\b[A-Z]\d{2}[a-z]?$|"
+    r"\[[A-Z0-9]{2,5}\s*-\s*\d{3,4}[^\]]*\]|\s-\s.*\b[A-Z]\d{2}[a-z]?$|"
     r"\[(?!(?i:pre-?\s*order|limit|sale|new\b|\d+\s*(?:x\s*)?(?:booster|pack)))[^\]]*[a-z ][^\]]*\]\s*$"
 )
 
