@@ -59,7 +59,10 @@ NON_CARD = re.compile(
     r"nintendo\s*switch|video\s*game|lunch\s*box|drink\s*bottle|backpack|book\b|annual|"
     r"sticker|colouring|dvd|blu-?ray|squishmallow|cushion|blanket|watch\b|weekly\s*play|\bdraft\s*-\s*\d|"
     r"socks|trunks|trainers|wrapping|gift\s*bag|\blamp\b|alarm\s*clock|comforter|\bthrow\b|christmas\s*cards|ticket|"
-    r"\b\d{1,2}(?::\d{2})?\s*[ap]m\b",  # a store event's start time: "Tournament Wed 12th August 6:30pm"
+    r"\b\d{1,2}(?::\d{2})?\s*[ap]\.?m\b|"  # a store event's start time: "Tournament Wed 12th August 6:30pm"
+    # Store event entries: "GD06 Stardust Trails Release Event - 31 Oct", "Newtype Challenge 2026 - MISSION 5",
+    # "Delta Reign Pre-Release (MONDAY)", "Pre-Rift Vendetta Mt Roskill". Not the sealed Prerelease/Pre-Rift kits.
+    r"\bevent\b|newtype\s*challenge|\bpre-?\s*release\b(?!\s*(?:kit|pack|box))|\bpre-?\s*rift\b(?!\s*kit)",
     re.I,
 )
 
