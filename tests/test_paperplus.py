@@ -36,7 +36,8 @@ def test_registered():
 
 def test_tiles():
     products = {p.sku: p for p in parse_tiles(load_fixture("paperplus", "category.html"))}
-    assert len(products) == 12
+    assert len(products) == 10  # not the binder pages or the Trainer Guess game
+    assert not any("Ultra Pro" in p.title or "Sinnoh" in p.title for p in products.values())
     p = products[PITCH_BLACK]
     assert p.title == "Pokemon TCG Mega Evolutions 5 Pitch Black Booster" and p.price_cents == 1099
     assert p.url == f"https://www.paperplus.co.nz/shop/{PITCH_BLACK}" and p.online.level is Level.IN
@@ -82,3 +83,16 @@ async def test_fetch_and_parse_ref():
     assert http.urls == [f"https://www.paperplus.co.nz/shop/{PITCH_BLACK}"] and p.online.level is Level.IN
     assert a.parse_ref(f"https://www.paperplus.co.nz/shop/{PITCH_BLACK}?x=1") == PITCH_BLACK
     assert a.matches_url("https://www.paperplus.co.nz/shop/x")
+
+
+def test_books_and_plush_are_not_card_products():
+    tile = ('<article data-url="/shop/{path}" data-category="{category}">'
+            '<span class="hidden js-product-data" data-name="{name}" data-price="29.99"></span></article>')
+    page = "".join(tile.format(path=f"x/{i}", category=c, name=n) for i, (c, n) in enumerate([
+        ("Pokemon", "Pokemon Select 30th Anniversary 8 Inch Plush"),
+        ("Books", "Pokemon Encyclopedia"),
+        ("Pokemon", "Pokemon TCG 30th Celebration Booster Bundle"),
+        ("Trading Cards", "Disney Lorcana Starter Deck"),
+    ]))
+    assert [p.title for p in parse_tiles(page)] == [
+        "Pokemon TCG 30th Celebration Booster Bundle", "Disney Lorcana Starter Deck"]
