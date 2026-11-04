@@ -10,7 +10,7 @@ Which channel gets which alerts is written down in [`tcgpings/discord/layout.jso
 - **Missing channel:** created in its category; a channel listed under an old name (`"was": ["kmart"]`) is renamed. Both need **Manage Channels**. Without it, an old-named channel is still used as it is, and the staff channel is told what's missing.
 - **Routes follow the file:** a changed entry replaces its routes, a removed one deletes them. Routes made by hand with `/route set` or `/route pings` are never touched.
 - **Renaming or moving a linked channel is fine:** the bot follows it by its Discord ID and keeps its alerts there. Deleting one makes the bot create it again; take it out of `layout.json` instead.
-- **Game channels skip sold-out new listings** (`"in_stock": true`): a product first seen sold out or unavailable posts there when it restocks. Retailer channels still show every new listing.
+- **Every alert needs stock:** a ping means it can be bought online or is on a shelf right now. A product listed sold out (or with no stock shown) posts when it comes into stock, and a price change on a sold-out product doesn't post at all. The exceptions are `out_of_stock` alerts (opt-in) and queue alerts.
 - An alert posts once in every channel whose route matches. A Pokémon 30th restock at Kmart Albany goes to `#kmart-instore`, `#pokemon-store-restocks` and, for members whose `/ping` keywords match, `#custom-pings`.
 
 | Channel | Gets |
@@ -26,7 +26,7 @@ Which channel gets which alerts is written down in [`tcgpings/discord/layout.jso
 
 **Overseas stores** (Pokémon Center AU and UK) only post in channels that name them. They stay out of the game channels, the catch-all and member `/ping`s, because they don't ship to NZ.
 
-To change it, edit `layout.json` (each route takes `retailer` or `adapter`, `store`: online/instore, `game`, `events`, `keywords`, `role`, `in_stock`) and deploy. `CHANNEL_LAYOUT=false` turns it off.
+To change it, edit `layout.json` (each route takes `retailer` or `adapter`, `store`: online/instore, `game`, `events`, `keywords`, `role`) and deploy. `CHANNEL_LAYOUT=false` turns it off.
 
 ## First-time setup: one command
 
@@ -146,10 +146,10 @@ Matching ignores case and accents ("pokemon" matches "Pokémon"). Words match fr
 
 | Type | When | Default |
 |---|---|---|
-| `new_product` | a product appears for the first time | on |
+| `new_product` | a product appears for the first time with stock (one listed sold out posts as a `restock` later) | on |
 | `restock` | out of stock → in stock (online or at a store) | on |
 | `qty_change` | stock goes up, or Low ↔ In | on |
-| `price_change` | online price changes | on |
+| `price_change` | online price changes while in stock | on |
 | `out_of_stock` | in stock → out | **off** (add `events:out_of_stock` to opt in) |
 | `queue` | a shop turns its waiting room on (Pokémon Center during big drops) | on (also in `#pokemon-online-shops`) |
 
