@@ -576,7 +576,7 @@ async def run_layout(ctx: Context, guild: discord.Guild, me: discord.abc.User, *
     async def add_route(channel: discord.TextChannel, url: str, spec: layout.ChannelSpec, r: layout.RouteSpec) -> None:
         await queries.add_route(ctx.pool, channel.id, url, r.retailer_id, r.store_id, r.franchise,
                                 list(r.event_types) if r.event_types else None, r.role_id, r.keywords,
-                                layout_channel=spec.name)
+                                layout_channel=spec.name, in_stock_only=r.in_stock_only)
 
     async def remove_route(route_id: int) -> None:
         await queries.remove_route(ctx.pool, route_id)

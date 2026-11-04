@@ -48,6 +48,17 @@ def test_default_event_types_exclude_out_of_stock():
     assert not route_matches(route(event_types=["out_of_stock"]), event(EventType.RESTOCK))
 
 
+def test_in_stock_only_route_skips_sold_out_new_listings_but_not_restocks():
+    r = route(store_id=ONLINE, franchise="pokemon", in_stock_only=True)
+    sold_out = Event(type=EventType.NEW_PRODUCT, retailer_id="ocare", sku="1", title="t", url="u", store_id=ONLINE,
+                     franchise="pokemon", new_level="out")
+    buyable = Event(type=EventType.NEW_PRODUCT, retailer_id="ocare", sku="1", title="t", url="u", store_id=ONLINE,
+                    franchise="pokemon", new_level="in")
+    assert not route_matches(r, sold_out) and route_matches(r, buyable)
+    assert route_matches(route(store_id=ONLINE), sold_out)  # retailer channels still get every new listing
+    assert route_matches(r, event(store=ONLINE))  # a restock
+
+
 def test_match_routes_returns_all_matches():
     routes = [route(id=1), route(id=2, store_id="westgate"), route(id=3, store_id="albany")]
     assert [r["id"] for r in match_routes(routes, event())] == [1, 2]

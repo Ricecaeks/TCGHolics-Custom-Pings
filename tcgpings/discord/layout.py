@@ -35,6 +35,7 @@ class RouteSpec:
     event_types: tuple[str, ...] | None = None
     keywords: str | None = None
     role_id: int | None = None
+    in_stock_only: bool = False  # new listings only when they can be bought (not sold-out or unavailable ones)
 
 
 @dataclass
@@ -128,39 +129,47 @@ def _route_specs(raw: Mapping[str, Any], channel: str, by_id: Mapping[str, Any],
         retailer_ids = [None]
     role = raw.get("role")
     return [RouteSpec(rid, STORES.get(store) if store else None, game, tuple(sorted(events)) if events else None,
-                      raw.get("keywords") or None, int(role) if role else None) for rid in retailer_ids]
+                      raw.get("keywords") or None, int(role) if role else None, bool(raw.get("in_stock")))
+            for rid in retailer_ids]
 
 
 def route_spec(route: Mapping[str, Any]) -> RouteSpec:
     events = route["event_types"]
     return RouteSpec(route["retailer_id"], route["store_id"], route["franchise"],
-                     tuple(sorted(events)) if events else None, route["keywords"] or None, route["role_id"])
+                     tuple(sorted(events)) if events else None, route["keywords"] or None, route["role_id"],
+                     bool(route.get("in_stock_only")))
 
 
 def plan(guild: Any, specs: Sequence[ChannelSpec], routes: Sequence[Mapping[str, Any]],
          can_manage_channels: bool, problems: Sequence[str] = ()) -> LayoutPlan:
     """What applying the layout would do, without changing anything."""
     by_name = {c.name: c for c in guild.text_channels}
+    by_id = {c.id: c for c in guild.text_channels}
     layout_routes = [r for r in routes if r["layout_channel"]]
     wanted = {s.name for s in specs}
     changes: list[ChannelChange] = []
     issues = list(problems)
     for spec in specs:
-        channel, action = by_name.get(spec.name), "ok"
+        mine = [r for r in layout_routes if r["layout_channel"] == spec.name]
+        # A channel already linked keeps its alerts wherever staff have since renamed or moved it.
+        linked = next((by_id[r["channel_id"]] for r in mine if r["channel_id"] in by_id), None)
+        channel, action = linked or by_name.get(spec.name), "ok"
+        old = None
         if channel is None and not spec.routes:
             action = "skip"  # nothing to send there (its retailer isn't enabled): don't make an empty channel
         elif channel is None:
             old = next((by_name[n] for n in spec.was if n in by_name), None)
-            if old is not None:
-                channel, action = old, "rename" if can_manage_channels else "old_name"
-                if not can_manage_channels:
-                    issues.append(f"#{old.name} should be renamed #{spec.name}: the bot needs Manage Channels")
-            elif can_manage_channels:
+            if old is None and can_manage_channels:
                 action = "create"
-            else:
+            elif old is None:
                 action = "blocked"
                 issues.append(f"#{spec.name} doesn't exist and the bot can't create it: it needs Manage Channels")
-        mine = [r for r in layout_routes if r["layout_channel"] == spec.name]
+        elif channel.name in spec.was:
+            old = channel  # linked under its old name before the bot could rename it
+        if old is not None:
+            channel, action = old, "rename" if can_manage_channels else "old_name"
+            if not can_manage_channels:
+                issues.append(f"#{old.name} should be renamed #{spec.name}: the bot needs Manage Channels")
         if channel is None:
             changes.append(ChannelChange(spec, None, action, list(spec.routes) if action == "create" else [],
                                          [r["id"] for r in mine]))

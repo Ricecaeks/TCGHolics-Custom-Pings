@@ -278,6 +278,18 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
 # --- products & state ------------------------------------------------------------------
 
 
+async def mark_announced(db: DB, retailer_id: str, sku: str) -> None:
+    await db.execute("UPDATE products SET announced_at = now() WHERE retailer_id = $1 AND sku = $2", retailer_id, sku)
+
+
+async def announced_within(db: DB, retailer_id: str, sku: str, seconds: int) -> bool:
+    """Was this product announced as a new listing in the last `seconds`?"""
+    return bool(await db.fetchval(
+        "SELECT announced_at > now() - make_interval(secs => $3) FROM products WHERE retailer_id = $1 AND sku = $2",
+        retailer_id, sku, seconds,
+    ))
+
+
 async def upsert_product(db: DB, p: Product) -> bool:
     """Returns True when the product was seen for the first time.
 
@@ -406,15 +418,16 @@ async def add_route(
     keywords: str | None = None,
     member_pings: bool = False,
     layout_channel: str | None = None,
+    in_stock_only: bool = False,
 ) -> int:
     return await db.fetchval(
         """
         INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords,
-                            member_pings, layout_channel)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
+                            member_pings, layout_channel, in_stock_only)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id
         """,
         retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords or None, member_pings,
-        layout_channel,
+        layout_channel, in_stock_only,
     )
 
 
