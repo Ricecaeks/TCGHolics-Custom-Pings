@@ -22,6 +22,7 @@ Which channel gets which alerts is written down in [`tcgpings/discord/layout.jso
 | `#pokemon-store-restocks` / `#onepiece-store-restocks` | that game in stock **at a physical store**, any retailer, plus member sightings |
 | `#pokemon-jb-hifi` | Pokémon at JB Hi-Fi |
 | `#pokemon-center-nz` / `-au` / `-uk` | that Pokémon Center store: sealed TCG listings, restocks and queue alerts |
+| `#p-bandai-nz` | Premium Bandai NZ card game pre-orders (One Piece, Gundam, Dragon Ball) when they open; also reach the game channels |
 | `#lorcana-alerts`, `#magic-alerts`, `#riftbound-alerts`, `#dragonball-alerts`, `#yugioh-alerts`, `#gundam-alerts` | that game anywhere: new listings, restocks, sightings |
 
 **Overseas stores** (Pokémon Center AU and UK) only post in channels that name them. They stay out of the game channels, the catch-all and member `/ping`s, because they don't ship to NZ.

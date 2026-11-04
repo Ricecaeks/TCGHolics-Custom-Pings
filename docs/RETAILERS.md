@@ -14,6 +14,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
 | Mighty Ape | `mightyape` | — (online only) | **live via ScrapFly** (Pokémon category every 30 min, all trading cards hourly: first page of each, about 2,000 credits a day). No keyword searches. No add-to-cart link |
+| P-Bandai NZ (Premium Bandai) | `pbandai` | — (online only) | **live, plain requests** (the whole Card Games category in one JSON request every 2 min; pre-orders count as in stock while their window is open and not sold out). No keyword searches |
 | Pokémon Center NZ / AU / UK | `pokemoncenter` | — (online only) | **live via Zyte** (sealed TCG range newest-first: page 1 every 3 min for NZ and 10 min for AU/UK, every page when the in-stock count changes and every 6 h; queue detection). No keyword searches. AU and UK are `overseas` |
 | Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
 | Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
@@ -67,6 +68,16 @@ DataDome answers 403 (a CAPTCHA page) to every page with product data: shop, sea
 - robots.txt disallows search (`?q=`) and sorting (`order_by`), so discovery reads the first page of each category in its default "featured" order, where new sets and preorders sit near the top.
 - SKU = the product URL slug (`kogan-international-pokemon-tcg-pitch-black-booster-pack-41201033`).
 - Keyword watches skip it (`supports_search = False`): every request costs credits.
+
+## P-Bandai NZ (recon 2026-11-05)
+
+Bandai's own store (https://p-bandai.com/nz), pre-orders only. The site is a Vue app: the search and product pages answer with a JavaScript bot check, but the JSON API behind them answers plain requests, so no unblocker is used.
+- `GET /api/search` with the header `X-G1-Area-Code: nz` (plus `Accept-Language: en`, `X-Requested-With: XMLHttpRequest`) returns the NZ store. `_f_categories=04-011` is the "Card Games" category (`/nz/category/card-games`), `sortType=NewArrival` sorts newest first, `limit` (up to 100) and `offset` page. On 2026-11-05 the category held 39 products (One Piece, Gundam, Dragon Ball Super, one Digimon set); the whole NZ store is 587, mostly clothing.
+- Each row: `productCode` (the SKU, e.g. N2898133002), `productName.en`, `fixedListPrice` (NZD), `productType` (all PreOrder), `saleStatus` Waiting / On / End, `displayStatus`, `saleStartExpectedDt` / `saleEndExpectedDt` (UTC), `productImages[].fileUrl` (relative to https://p-bandai.com/) and `flags`: PRE_ORDER, PRE_ORDER_CLOSED, OUT_OF_STOCK, CHANCE_TO_BUY_DRAWING (a lottery for the right to buy), EXCLUSIVE.
+- **In stock** = `saleStatus` On, `displayStatus` On and no OUT_OF_STOCK flag. A pre-order can be On (its window is open) yet flagged OUT_OF_STOCK once its allocation sells out. Waiting rows are out of stock with a note saying when they open (NZ time); the restock alert fires when the window opens.
+- Each sale window has its own product code (a re-run is a new listing).
+- `/api/search/bulk?productCodes=a,b&limit=n` returns the same rows for specific products (watches). Product pages are `/nz/item/{productCode}`.
+- Playmats are skipped as accessories, and Digimon and Union Arena aren't games the bot tracks.
 
 ## Pokémon Center (recon 2026-11-05)
 

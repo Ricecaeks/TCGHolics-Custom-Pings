@@ -1,0 +1,77 @@
+[
+ {
+  "areaProductNo": "NAP0461458002NZ",
+  "productCode": "N2898133002",
+  "areaCode": "NZ",
+  "productName": {
+   "en": "GUNDAM CARD GAME Premium Goods Set After War Gundam X [PB04]"
+  },
+  "productType": "PreOrder",
+  "fixedPrice": true,
+  "fixedListPrice": {
+   "amount": 161.0,
+   "currency": "NZD"
+  },
+  "saleStatus": "On",
+  "displayStatus": "On",
+  "saleStartExpectedDt": "2026-10-26T02:00:00Z",
+  "saleEndExpectedDt": "2026-11-09T14:59:59.999Z",
+  "productImages": [
+   {
+    "fileUrl": "files/seller-products/NSP0461458001/FCUVcLVjRjJird2y64kt.jpg",
+    "mediaType": "Image",
+    "altText": "GCG_PB_syouhin_X_en00",
+    "width": 1200,
+    "height": 1200
+   }
+  ],
+  "flags": [
+   "OUT_OF_STOCK"
+  ],
+  "productFlags": [
+   {
+    "labelCode": "OUT_OF_STOCK",
+    "labelName": {
+     "en": "OUT OF STOCK"
+    }
+   }
+  ]
+ },
+ {
+  "areaProductNo": "NAP0218278006NZ",
+  "productCode": "N2542162006",
+  "areaCode": "NZ",
+  "productName": {
+   "en": "Mobile Suit Gundam Acrylic Logo Display EX (Big Size)"
+  },
+  "productType": "PreOrder",
+  "fixedPrice": true,
+  "fixedListPrice": {
+   "amount": 24.0,
+   "currency": "NZD"
+  },
+  "saleStatus": "End",
+  "displayStatus": "On",
+  "saleStartExpectedDt": "2025-10-07T06:00:00Z",
+  "saleEndExpectedDt": "2025-10-16T14:59:59.999Z",
+  "productImages": [
+   {
+    "fileUrl": "files/seller-products/NSP0218278004/bwy63FK5HoCnSrQwZmbQ.jpg",
+    "mediaType": "Image",
+    "width": 560,
+    "height": 560
+   }
+  ],
+  "flags": [
+   "PRE_ORDER_CLOSED"
+  ],
+  "productFlags": [
+   {
+    "labelCode": "PRE_ORDER_CLOSED",
+    "labelName": {
+     "en": "PRE-ORDER CLOSED"
+    }
+   }
+  ]
+ }
+]

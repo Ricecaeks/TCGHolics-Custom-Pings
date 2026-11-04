@@ -55,7 +55,9 @@
         {"name": "onepiece-online-shops", "topic": "One Piece in stock online, any store",
          "routes": [{"game": "one_piece", "store": "online", "events": ["new_product", "restock"]}]},
         {"name": "onepiece-store-restocks", "topic": "One Piece showing in stock at a physical store",
-         "routes": [{"game": "one_piece", "store": "instore", "events": ["new_product", "restock", "spotted"]}]}
+         "routes": [{"game": "one_piece", "store": "instore", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "p-bandai-nz", "topic": "Premium Bandai NZ: card game pre-orders (One Piece, Gundam, Dragon Ball...) as they open",
+         "routes": [{"retailer": "pbandai-nz", "events": ["new_product", "restock"]}]}
       ]
     },
     {
