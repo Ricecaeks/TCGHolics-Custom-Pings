@@ -1,0 +1,339 @@
+{
+ "productResults": {
+  "sortType": "NewArrival",
+  "limit": 100,
+  "offset": 0,
+  "totalCount": 39,
+  "productStatusWaitingCount": 0,
+  "productStatusOnCount": 0,
+  "productStatusEndCount": 0,
+  "products": [
+   {
+    "areaProductNo": "NAP0461458002NZ",
+    "productCode": "N2898133002",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "GUNDAM CARD GAME Premium Goods Set After War Gundam X [PB04]"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 161.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "On",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-10-26T02:00:00Z",
+    "saleEndExpectedDt": "2026-11-09T14:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0461458001/FCUVcLVjRjJird2y64kt.jpg",
+      "mediaType": "Image",
+      "altText": "GCG_PB_syouhin_X_en00",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "OUT_OF_STOCK"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "OUT_OF_STOCK",
+      "labelName": {
+       "en": "OUT OF STOCK"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0461458001NZ",
+    "productCode": "N2898133001",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "GUNDAM CARD GAME Premium Goods Set After War Gundam X [PB04]"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 161.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-10-15T02:00:00Z",
+    "saleEndExpectedDt": "2026-10-21T03:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0461458001/FCUVcLVjRjJird2y64kt.jpg",
+      "mediaType": "Image",
+      "altText": "GCG_PB_syouhin_X_en00",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "CHANCE_TO_BUY_DRAWING",
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     },
+     {
+      "labelCode": "CHANCE_TO_BUY_DRAWING",
+      "labelName": {
+       "en": "CHANCE TO BUY DRAWING"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0472002002NZ",
+    "productCode": "N2913286002",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "GUNDAM CARD GAME Deck Build Box Freedom Ascension [SC01]"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 72.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-10-15T02:00:00Z",
+    "saleEndExpectedDt": "2026-10-21T03:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0472002001/TWakDQMbAsCmBmgN2Wyj.webp",
+      "mediaType": "Image",
+      "altText": "custom_sleeve_dummy_EN",
+      "width": 2585,
+      "height": 2585
+     }
+    ],
+    "flags": [
+     "CHANCE_TO_BUY_DRAWING",
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     },
+     {
+      "labelCode": "CHANCE_TO_BUY_DRAWING",
+      "labelName": {
+       "en": "CHANCE TO BUY DRAWING"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0458105002NZ",
+    "productCode": "N2890904002",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "GUNDAM CARD GAME 1st Anniversary Set [April 2027 Delivery]"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 250.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-08-24T02:00:00Z",
+    "saleEndExpectedDt": "2026-09-03T14:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0458105002/UKV5Yf243cYgUmyR6omJ.jpg",
+      "mediaType": "Image",
+      "altText": "PB03_syouhin_en_00 (3)",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0448727002NZ",
+    "productCode": "N2881648002",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "ONE PIECE CARD GAME Premium Card Collection -Ace & Sabo & Luffy-"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 59.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-08-05T02:00:00Z",
+    "saleEndExpectedDt": "2026-08-20T14:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0448727001/5wNS1if8Q4fPnMN6R5cw.jpg",
+      "mediaType": "Image",
+      "altText": "OPCG_PC_ASL_01",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0435193001NZ",
+    "productCode": "N2863373001",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "ONE PIECE CARD GAME Official Playmat Limited Edition vol.6"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 58.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-06-25T02:00:00Z",
+    "saleEndExpectedDt": "2026-07-15T14:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0435193001/vph1eDGYyt911W1BcaAz.jpg",
+      "mediaType": "Image",
+      "altText": "OPCG_playmatlim6_01",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0448379001NZ",
+    "productCode": "N9061580001",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "DRAGON BALL SUPER CARD GAME MASTERS ULTRA-BOUT Series 03 -THREE GLORIOUS FIGHTERS- [DBS-B30]"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 272.3,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2026-03-17T01:00:00Z",
+    "saleEndExpectedDt": "2026-03-29T14:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0448379001/QhagJV6VpEuHTqf31WUU.png",
+      "mediaType": "Image",
+      "altText": "30弾_DPBOX_dummy",
+      "width": 1216,
+      "height": 1216
+     }
+    ],
+    "flags": [
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     }
+    ]
+   },
+   {
+    "areaProductNo": "NAP0348047001NZ",
+    "productCode": "N2796242001",
+    "areaCode": "NZ",
+    "productName": {
+     "en": "DIGIMON CARD GAME Premium Heroines Set Ver. 2"
+    },
+    "productType": "PreOrder",
+    "fixedPrice": true,
+    "fixedListPrice": {
+     "amount": 88.0,
+     "currency": "NZD"
+    },
+    "saleStatus": "End",
+    "displayStatus": "On",
+    "saleStartExpectedDt": "2025-07-16T23:00:00Z",
+    "saleEndExpectedDt": "2025-09-07T10:59:59.999Z",
+    "productImages": [
+     {
+      "fileUrl": "files/seller-products/NSP0348047001/l0baNqhz5JKtOvx1zhU3.jpg",
+      "mediaType": "Image",
+      "altText": "e_Digi_PB23_bana_1200ﾃ・200_1",
+      "width": 1200,
+      "height": 1200
+     }
+    ],
+    "flags": [
+     "PRE_ORDER_CLOSED"
+    ],
+    "productFlags": [
+     {
+      "labelCode": "PRE_ORDER_CLOSED",
+      "labelName": {
+       "en": "PRE-ORDER CLOSED"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "aggs": {
+  "productStatuses": [
+   {
+    "productStatus": "End",
+    "prodCount": 39
+   }
+  ]
+ }
+}

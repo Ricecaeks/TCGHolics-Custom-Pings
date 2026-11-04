@@ -59,7 +59,8 @@ def test_the_shipped_layout_parses():
                                          ("paperplus", "paperplus"), ("whitcoulls", "whitcoulls"),
                                          ("retrospace", "retrospace"), ("mightyape", "mightyape"),
                                          ("card-merchant", "shopify"), ("pokemoncenter-nz", "pokemoncenter"),
-                                         ("pokemoncenter-au", "pokemoncenter"), ("pokemoncenter-uk", "pokemoncenter")]]
+                                         ("pokemoncenter-au", "pokemoncenter"), ("pokemoncenter-uk", "pokemoncenter"),
+                                         ("pbandai-nz", "pbandai")]]
     parsed, problems = layout.parse(data, every)
     assert problems == []
     names = [s.name for s in parsed]
