@@ -17,6 +17,7 @@ TITLES = {
     EventType.QTY_CHANGE: "📦 Stock change",
     EventType.PRICE_CHANGE: "💲 Price change",
     EventType.SPOTTED: "👀 Spotted in store",
+    EventType.QUEUE: "🚦 Queue live",
 }
 
 COLORS = {
@@ -26,6 +27,7 @@ COLORS = {
     EventType.QTY_CHANGE: 0xF59E0B,
     EventType.PRICE_CHANGE: 0xA855F7,
     EventType.SPOTTED: 0x06B6D4,
+    EventType.QUEUE: 0xF97316,
 }
 
 
@@ -38,6 +40,8 @@ def _stock(level: str | None, qty: int | None) -> str:
 def build_embed(event: Event) -> discord.Embed:
     retailer = event.extra.get("retailer_name") or event.retailer_id
     where = event.store_name or "Online"
+    if event.type is EventType.QUEUE:
+        return _queue_embed(event, retailer)
     links = [f"[🛒 **Add to cart**]({event.atc_url})"] if event.atc_url else []
     if event.url:
         links.append(f"[View product]({event.url})")
@@ -76,6 +80,20 @@ def build_embed(event: Event) -> discord.Embed:
     if event.franchise:
         embed.add_field(name="Game", value=FRANCHISE_NAMES.get(event.franchise, event.franchise))
     embed.set_footer(text=f"TCGHolics Pings · {event.sku}", icon_url=LOGO_URL)
+    return embed
+
+
+def _queue_embed(event: Event, retailer: str) -> discord.Embed:
+    embed = discord.Embed(
+        title=event.title[:256],
+        url=event.url or None,
+        description=f"{retailer} has turned its waiting room on, so a drop is under way. "
+                    f"[Join the queue]({event.url}) and keep the page open."[:4096],
+        color=COLORS[event.type],
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.set_author(name=f"{TITLES[event.type]} · {retailer}")
+    embed.set_footer(text="TCGHolics Pings · queue", icon_url=LOGO_URL)
     return embed
 
 

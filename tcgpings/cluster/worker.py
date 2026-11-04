@@ -184,6 +184,9 @@ class Worker:
         kept, wanted = 0, []
         for product in results:
             classify_product(product)
+            if product.kind:  # a status row (a shop's queue), not a product
+                await self.ctx.pipeline.record(retailer, product)
+                continue
             if not is_sealed_product(product.title, product.franchise, product.ptype):
                 continue
             await self.ctx.pipeline.record(retailer, product, *_listed_stock(adapter, product), announce_new=announce)

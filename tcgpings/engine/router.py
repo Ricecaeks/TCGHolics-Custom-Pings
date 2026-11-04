@@ -14,6 +14,8 @@ def route_matches(route: Mapping[str, Any], event: Event) -> bool:
     """NULL filters match anything; store_id '' matches only online events, '*' only store events."""
     if route["retailer_id"] is not None and route["retailer_id"] != event.retailer_id:
         return False
+    if route["retailer_id"] is None and event.extra.get("overseas"):
+        return False  # overseas shops (Pokémon Center AU/UK) only reach channels that name them
     if route["store_id"] == ANY_STORE:
         if event.store_id == ONLINE:
             return False

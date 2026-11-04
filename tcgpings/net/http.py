@@ -19,6 +19,12 @@ BAN_STATUSES = {403, 429}
 BAN_MARKERS = re.compile(
     r"captcha|cf-chl|challenge-platform|access denied|px-block|perimeterx|are you a robot|WAF_Deny_Page", re.I
 )
+# A shop's waiting room (Imperva / Queue-it / Cloudflare) in place of the page: shoppers are being held in line.
+QUEUE_MARKERS = re.compile(
+    r"waiting\s*room|you\s+are\s+(?:now\s+)?in\s+(?:the\s+)?(?:line|queue)|queue-it\.net|virtual\s+queue|"
+    r"estimated\s+wait(?:ing)?\s+time|your\s+place\s+in\s+(?:the\s+)?(?:line|queue)",
+    re.I,
+)
 PROXY_BAN_SECONDS = 600
 
 
@@ -31,6 +37,14 @@ class FetchError(Exception):
 
 class Blocked(FetchError):
     """The retailer refused the request (bot protection / rate limit)."""
+
+
+class Queued(FetchError):
+    """The retailer served its waiting room instead of the page: a queue is on (a big drop is under way).
+
+    Raised only when the caller asked for queue detection. It carries the retailer's status, so the fetch
+    chain treats it as the retailer's answer (no route is rested and no other route is tried).
+    """
 
 
 @dataclass(frozen=True)
@@ -147,6 +161,11 @@ class HttpClient:
                 await self._on_ban(proxy)
             except Exception:
                 log.exception("failed to record proxy ban")
+
+
+def looks_like_queue_page(text: str) -> bool:
+    """A waiting-room page. Real store pages are far bigger (Pokémon Center's are ~700 kB) and never say this."""
+    return len(text) < 300_000 and bool(QUEUE_MARKERS.search(text))
 
 
 def looks_like_ban_page(text: str) -> bool:

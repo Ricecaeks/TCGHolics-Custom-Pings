@@ -171,9 +171,13 @@ class FetchChain:
 
     async def fetch_text(
         self, policy: NetPolicy, origin: str, url: str, headers: dict | None = None, order: list[str] | None = None,
-        body: str | None = None,
+        body: str | None = None, country: str | None = None, detect_queue: bool = False,
     ) -> str:
-        """GET `url`, or POST `body` to it, through the first route that gets through."""
+        """GET `url`, or POST `body` to it, through the first route that gets through.
+
+        `country` picks the unblocker's exit country for this request (Pokémon Center's NZ, AU and UK
+        stores each need their own). With `detect_queue`, a waiting-room page raises Queued.
+        """
         method = "GET" if body is None else "POST"
         routes = self.available(order or list(self.backends))
         if not routes:
@@ -197,11 +201,14 @@ class FetchChain:
                 continue
             if backend.paid:
                 await self.limiter.acquire(rid, name, policy.requests_per_minute)
+            options = {}
+            if getattr(backend, "options", False) and (country or detect_queue):
+                options = {"country": country, "detect_queue": detect_queue}
             try:
                 if body is None:
-                    text, cost = await backend.fetch(policy, origin, url, headers)
+                    text, cost = await backend.fetch(policy, origin, url, headers, **options)
                 else:
-                    text, cost = await backend.fetch(policy, origin, url, headers, body=body)
+                    text, cost = await backend.fetch(policy, origin, url, headers, body=body, **options)
             except Blocked as exc:
                 rest = self.cooldowns.unblocker_blocked if backend.paid else self.cooldowns.browser_blocked
                 log.warning("%s: %s blocked, resting it %d min: %s", rid, name, rest // 60, exc)

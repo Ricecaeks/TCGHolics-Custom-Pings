@@ -47,6 +47,8 @@ class Product:
     # Store-level stock that comes with the listing itself (Kmart's per-island flags), store_id -> stock.
     stores: dict[str, Stock] | None = None
     note: str | None = None  # shown on alerts, e.g. "In-store only"
+    # A status row rather than something to buy: "queue" = the shop's waiting room (IN while it's on).
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,7 @@ class EventType(StrEnum):
     QTY_CHANGE = "qty_change"
     PRICE_CHANGE = "price_change"
     SPOTTED = "spotted"  # a member reporting stock they've seen, not a reading from the retailer
+    QUEUE = "queue"  # the shop turned its waiting room on: a big drop is under way
 
 
 # Out-of-stock alerts are opt-in per route; everything else is on by default.

@@ -210,3 +210,10 @@ def test_a_bracketed_deck_code_is_not_a_card_number():
 
     assert is_sealed_product("One Piece TCG - Learn Together Deck [LT-01]")
     assert is_single_card("Ultra Rare [VEN - 034/166]")
+
+
+def test_tech_sticker_collections_are_sealed_but_sticker_books_are_not():
+    from tcgpings.classify import is_sealed_product
+
+    assert is_sealed_product("Pokémon TCG: Scarlet & Violet-Black Bolt Tech Sticker Collection")
+    assert not is_sealed_product("Pokémon Sticker Book")
