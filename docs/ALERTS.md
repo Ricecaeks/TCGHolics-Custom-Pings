@@ -2,6 +2,27 @@
 
 Everything here is done from Discord with slash commands. Only server admins and the staff role (`STAFF_ROLE_ID`) can run them.
 
+## The server's alert channels (layout)
+
+Which channel gets which alerts is written down in [`tcgpings/discord/layout.json`](../tcgpings/discord/layout.json). Every 10 minutes the bot applies it on its own (`/layout` previews it, `/layout apply:True` applies it now):
+
+- **Existing channel:** the bot makes its own webhook there (needs **Manage Webhooks**) and saves the channel's routes.
+- **Missing channel:** created in its category; a channel listed under an old name (`"was": ["kmart"]`) is renamed. Both need **Manage Channels**. Without it, an old-named channel is still used as it is, and the staff channel is told what's missing.
+- **Routes follow the file:** a changed entry replaces its routes, a removed one deletes them. Routes made by hand with `/route set` or `/route pings` are never touched.
+- An alert posts once in every channel whose route matches. A Pokémon 30th restock at Kmart Albany goes to `#kmart-instore`, `#pokemon-store-restocks` and, for members whose `/ping` keywords match, `#custom-pings`.
+
+| Channel | Gets |
+|---|---|
+| `#kmart-online` / `#kmart-instore` (same for Farmers, JB Hi-Fi, Toyworld) | that retailer, all games, online vs in-store |
+| `#the-warehouse`, `#paper-plus`, `#whitcoulls` | that retailer |
+| `#card-shop-sites` | every Shopify card shop, plus Retrospace |
+| `#pokemon-online-shops` / `#onepiece-online-shops` | that game in stock **online**, any retailer: new listings and restocks |
+| `#pokemon-store-restocks` / `#onepiece-store-restocks` | that game in stock **at a physical store**, any retailer, plus member sightings |
+| `#pokemon-jb-hifi` | Pokémon at JB Hi-Fi |
+| `#lorcana-alerts`, `#magic-alerts`, `#riftbound-alerts`, `#dragonball-alerts`, `#yugioh-alerts`, `#gundam-alerts` | that game anywhere: new listings, restocks, sightings |
+
+To change it, edit `layout.json` (each route takes `retailer` or `adapter`, `store`: online/instore, `game`, `events`, `keywords`, `role`) and deploy. `CHANNEL_LAYOUT=false` turns it off.
+
 ## First-time setup: one command
 
 ```

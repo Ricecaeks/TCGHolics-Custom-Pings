@@ -13,7 +13,7 @@ from tcgpings.classify import FRANCHISE_NAMES, franchise_of
 from tcgpings.cluster.leadership import reconcile
 from tcgpings.context import Context
 from tcgpings.db import queries
-from tcgpings.discord import setup
+from tcgpings.discord import layout, setup
 from tcgpings.discord.embeds import sample_event
 from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, slugify
@@ -255,7 +255,7 @@ class RouteGroup(app_commands.Group, name="route", description="Which alerts go 
         channel = interaction.channel
         if not isinstance(channel, discord.TextChannel):
             return await _reply(interaction, "Run this in a text channel.")
-        if store and not retailer:
+        if store and not retailer and store.lower() not in ("online", "instore", "in-store"):
             return await _reply(interaction, "Pick a `retailer` to route a specific store.")
         if retailer and not await queries.get_retailer(ctx.pool, retailer):
             return await _reply(interaction, f"Unknown retailer `{retailer}`.")
@@ -552,6 +552,60 @@ async def setup_cmd(
     await _run_setup(interaction, retailer, role, confirm)
 
 
+async def run_layout(ctx: Context, guild: discord.Guild, me: discord.abc.User, *, apply: bool = True
+                     ) -> tuple[layout.LayoutPlan, layout.LayoutResult | None]:
+    """Plan the channel layout from layout.json and, with `apply`, make it so."""
+    specs, problems = layout.parse(layout.load_file(), await queries.list_retailers(ctx.pool, enabled_only=True))
+    can_manage = guild.me.guild_permissions.manage_channels
+    plan = layout.plan(guild, specs, await queries.list_routes(ctx.pool), can_manage, problems)
+    if not apply or not plan.pending:
+        return plan, None
+
+    async def webhook_url(channel: discord.TextChannel) -> str:
+        return (await _webhook_for(channel, me)).url
+
+    async def create_channel(spec: layout.ChannelSpec) -> discord.TextChannel:
+        category = next((c for c in guild.categories if c.name.lower() == spec.category.lower()), None)
+        if category is None:
+            category = await guild.create_category(spec.category, reason="TCGHolics Pings layout")
+        return await category.create_text_channel(spec.name, topic=spec.topic, reason="TCGHolics Pings layout")
+
+    async def rename(channel: discord.TextChannel, name: str) -> None:
+        await channel.edit(name=name, reason="TCGHolics Pings layout")
+
+    async def add_route(channel: discord.TextChannel, url: str, spec: layout.ChannelSpec, r: layout.RouteSpec) -> None:
+        await queries.add_route(ctx.pool, channel.id, url, r.retailer_id, r.store_id, r.franchise,
+                                list(r.event_types) if r.event_types else None, r.role_id, r.keywords,
+                                layout_channel=spec.name)
+
+    async def remove_route(route_id: int) -> None:
+        await queries.remove_route(ctx.pool, route_id)
+
+    try:
+        result = await layout.apply(plan, layout.Ops(webhook_url, create_channel, rename, add_route, remove_route))
+    finally:
+        ctx.routes.invalidate()
+    return plan, result
+
+
+@app_commands.command(name="layout", description="Alert channels from the bot's layout: preview, or apply now")
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.describe(apply="False (default) shows what's linked and what's missing; True applies it now")
+async def layout_cmd(interaction: discord.Interaction, apply: bool = False) -> None:
+    guild = interaction.guild
+    if guild is None:
+        return await _reply(interaction, "Run this in the server.")
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    plan, result = await run_layout(_ctx(interaction), guild, interaction.client.user, apply=apply)
+    text = layout.describe(plan)
+    if result is not None:
+        text = result.summary() + "\n\n" + text
+    elif apply:
+        text = "Nothing to change.\n\n" + text
+    await _reply(interaction, text[:1990])
+
+
 @app_commands.command(name="stores", description="List a retailer's stores")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
@@ -642,7 +696,7 @@ def register(tree: app_commands.CommandTree) -> None:
 
     for group in (WatchGroup(), RouteGroup(), RetailerGroup(), PingGroup(), HotGroup()):
         tree.add_command(group)
-    for cmd in (setup_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd, spotted_cmd):
+    for cmd in (setup_cmd, layout_cmd, stores_cmd, status_cmd, test_alert_cmd, keywords_test_cmd, spotted_cmd):
         tree.add_command(cmd)
 
     async def check(interaction: discord.Interaction) -> bool:
