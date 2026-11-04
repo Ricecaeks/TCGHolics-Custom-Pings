@@ -178,3 +178,28 @@ def test_retrospace_titles():
     assert not is_sealed_product("Yu-Gi-Oh! Jaden & Yubel Card Case")
     assert not is_sealed_product("Yu-Gi-Oh! Jaden & Yubel Game Mat")
     assert not is_sealed_product("Stingcaster Mage [Reality Fracture]")  # still a single
+
+
+@pytest.mark.parametrize("title", [
+    "Gundam Card Game GD06 Stardust Trails Release Event - SEALED - 31 Oct 2026",
+    "Gundam Card Game Newtype Challenge 2026 - MISSION 5 (December) - 5 Dec 2026",
+    "GUNDAM CARD GAME 1st Anniversary Event Mt Roskill, Sunday October 18, 2026 2:30 p.m",
+    "One Piece Card Game EB05 HEROINES BATTLE Release Event! - 07 Nov - 7 Nov 2026",
+    "Magic the Gathering Pre-Release Event: Star Trek",
+    "Pokemon - Delta Reign Pre-Release (MONDAY)",
+    "Riftbound: League of Legends TCG – Pre-Rift Vendetta Mt Roskill",
+])
+def test_store_event_entries_are_not_products(title):
+    from tcgpings.classify import is_sealed_product
+
+    assert not is_sealed_product(title)
+
+
+@pytest.mark.parametrize("title", [
+    "MTG Prerelease Kit - The Hobbit", "Magic The Gathering - Reality Fracture Prerelease Pack",
+    "Riftbound: League of Legends TCG Vendetta Pre-Rift Kit", "Pokemon TCG - Iono Premium Tournament Collection",
+])
+def test_prerelease_kits_are_still_sealed(title):
+    from tcgpings.classify import is_sealed_product
+
+    assert is_sealed_product(title)
