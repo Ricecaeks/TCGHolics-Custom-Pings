@@ -188,3 +188,37 @@ async def test_apply_reports_a_channel_it_cant_make_a_webhook_in():
 def test_a_channel_with_nothing_to_route_is_not_created():
     plan = layout.plan(Guild(), [specs()["toyworld-online"]], [], can_manage_channels=True)
     assert plan.changes[0].action == "skip" and not plan.pending and plan.problems == []
+
+
+def test_a_linked_channel_staff_renamed_keeps_its_alerts():
+    guild = Guild("🔥pokemon-online")  # staff renamed #pokemon-online-shops
+    channel = guild.text_channels[0]
+    s = specs()["pokemon-online-shops"]
+    routes = [route_row(1, channel, s.routes[0], "pokemon-online-shops")]
+    plan = layout.plan(guild, [s], routes, can_manage_channels=True)
+    [change] = plan.changes
+    assert change.action == "ok" and change.channel is channel and not plan.pending
+
+
+def test_a_channel_linked_under_its_old_name_is_renamed_once_allowed():
+    guild = Guild("kmart")
+    channel = guild.text_channels[0]
+    s = specs()["kmart-online"]
+    routes = [route_row(1, channel, s.routes[0], "kmart-online")]
+    [change] = layout.plan(guild, [s], routes, can_manage_channels=False).changes
+    assert change.action == "old_name" and change.add == [] and change.remove == []
+    [change] = layout.plan(guild, [s], routes, can_manage_channels=True).changes
+    assert change.action == "rename" and change.channel is channel and change.add == []
+
+
+def test_in_stock_flag_round_trips():
+    data = {"categories": [{"name": "X", "channels": [
+        {"name": "a", "routes": [{"game": "pokemon", "store": "online", "in_stock": True}]}]}]}
+    [spec], _ = layout.parse(data, RETAILERS)
+    assert spec.routes[0].in_stock_only
+    guild = Guild("a")
+    row = {**route_row(1, guild.text_channels[0], spec.routes[0], "a"), "in_stock_only": True}
+    assert not layout.plan(guild, [spec], [row], can_manage_channels=True).pending
+    stale = {**row, "in_stock_only": False}  # made before the flag: replaced
+    [change] = layout.plan(guild, [spec], [stale], can_manage_channels=True).changes
+    assert change.remove == [1] and change.add == spec.routes

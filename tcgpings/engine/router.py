@@ -7,7 +7,7 @@ from typing import Any
 from tcgpings.classify import FRANCHISE_NAMES
 from tcgpings.db import queries
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.models import ANY_STORE, DEFAULT_EVENT_TYPES, ONLINE, Event
+from tcgpings.models import ANY_STORE, DEFAULT_EVENT_TYPES, ONLINE, Event, EventType
 
 
 def route_matches(route: Mapping[str, Any], event: Event) -> bool:
@@ -21,6 +21,8 @@ def route_matches(route: Mapping[str, Any], event: Event) -> bool:
         return False
     if route["franchise"] is not None and route["franchise"] != event.franchise:
         return False
+    if route.get("in_stock_only") and event.type is EventType.NEW_PRODUCT and event.new_level not in ("in", "low"):
+        return False  # a new listing that's sold out or unavailable: its restock will alert instead
     allowed = route["event_types"]
     if allowed is None:
         if event.type not in DEFAULT_EVENT_TYPES:
