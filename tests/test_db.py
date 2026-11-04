@@ -330,3 +330,27 @@ async def test_an_announced_product_out_of_stock_in_store_is_quiet(pool):
     pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
     events = await pipe.record(RETAILER, store_product(), {"albany": Stock(Level.OUT, 0)}, announce_new=True)
     assert [e.type.value for e in events] == ["new_product"]
+
+
+async def test_sold_out_listings_and_their_price_changes_stay_quiet(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    await pipe.record(RETAILER, product(Level.OUT, 8999), announce_new=True)
+    await pipe.record(RETAILER, product(Level.OUT, 9999))
+    assert await outbox(pool) == []
+    await pipe.record(RETAILER, product(Level.IN, 9999))
+    await pipe.record(RETAILER, product(Level.IN, 8999))
+    assert [r["payload"]["type"] for r in await outbox(pool)] == ["restock", "price_change"]
+
+
+async def test_a_listing_without_stock_info_posts_when_stock_shows(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    tile = Product("farmers", "30th-tin", "Pokemon TCG 30th Celebration Tin", "https://x/tin", online=None)
+    await pipe.record(RETAILER, tile, announce_new=True)
+    assert await outbox(pool) == []  # Farmers tiles carry no stock
+    checked = Product("farmers", "30th-tin", "Pokemon TCG 30th Celebration Tin", "https://x/tin", online=Stock(Level.IN))
+    [event] = await pipe.record(RETAILER, checked)
+    assert (event.type.value, event.new_level) == ("new_product", "in")
+    assert [r["payload"]["type"] for r in await outbox(pool)] == ["new_product"]
+    assert await pipe.record(RETAILER, checked) == []

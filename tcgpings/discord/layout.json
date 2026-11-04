@@ -1,5 +1,5 @@
 {
-  "_help": "Which Discord channel gets which alerts. The bot links each channel's webhook and keeps its routes in sync every 10 minutes (or /layout apply). A channel can have several routes; an alert posts once per channel. Route fields: retailer (id) or adapter (every retailer using it), store (online | instore), game (pokemon, one_piece, riftbound, mtg, lorcana, yugioh, gundam, dragonball), events (new_product, restock, qty_change, price_change, out_of_stock, spotted, queue; default all but out_of_stock), keywords, role (role id to ping), in_stock (true: skip new listings that are sold out when first seen; their restock still alerts). 'was' lists old names to rename from.",
+  "_help": "Which Discord channel gets which alerts. The bot links each channel's webhook and keeps its routes in sync every 10 minutes (or /layout apply). A channel can have several routes; an alert posts once per channel. Route fields: retailer (id) or adapter (every retailer using it), store (online | instore), game (pokemon, one_piece, riftbound, mtg, lorcana, yugioh, gundam, dragonball), events (new_product, restock, qty_change, price_change, out_of_stock, spotted, queue; default all but out_of_stock), keywords, role (role id to ping). 'was' lists old names to rename from.",
   "categories": [
     {
       "name": "STORE ALERTS (ALL TCG)",
@@ -36,11 +36,11 @@
       "name": "POKÉMON ALERTS",
       "channels": [
         {"name": "pokemon-online-shops", "topic": "Pokémon in stock online, any store",
-         "routes": [{"game": "pokemon", "store": "online", "events": ["new_product", "restock", "queue"], "in_stock": true}]},
+         "routes": [{"game": "pokemon", "store": "online", "events": ["new_product", "restock", "queue"]}]},
         {"name": "pokemon-store-restocks", "topic": "Pokémon showing in stock at a physical store",
-         "routes": [{"game": "pokemon", "store": "instore", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
+         "routes": [{"game": "pokemon", "store": "instore", "events": ["new_product", "restock", "spotted"]}]},
         {"name": "pokemon-jb-hifi", "topic": "Pokémon at JB Hi-Fi, online and in-store",
-         "routes": [{"retailer": "jbhifi", "game": "pokemon", "events": ["new_product", "restock"], "in_stock": true}]},
+         "routes": [{"retailer": "jbhifi", "game": "pokemon", "events": ["new_product", "restock"]}]},
         {"name": "pokemon-center-nz", "topic": "Pokémon Center NZ: sealed TCG listings, restocks and queues",
          "routes": [{"retailer": "pokemoncenter-nz"}]},
         {"name": "pokemon-center-au", "topic": "Pokémon Center AU (ships within Australia only): sealed TCG and queues",
@@ -53,22 +53,22 @@
       "name": "ONE PIECE ALERTS",
       "channels": [
         {"name": "onepiece-online-shops", "topic": "One Piece in stock online, any store",
-         "routes": [{"game": "one_piece", "store": "online", "events": ["new_product", "restock"], "in_stock": true}]},
+         "routes": [{"game": "one_piece", "store": "online", "events": ["new_product", "restock"]}]},
         {"name": "onepiece-store-restocks", "topic": "One Piece showing in stock at a physical store",
-         "routes": [{"game": "one_piece", "store": "instore", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
+         "routes": [{"game": "one_piece", "store": "instore", "events": ["new_product", "restock", "spotted"]}]},
         {"name": "p-bandai-nz", "topic": "Premium Bandai NZ: card game pre-orders (One Piece, Gundam, Dragon Ball...) as they open",
-         "routes": [{"retailer": "pbandai-nz", "events": ["new_product", "restock"], "in_stock": true}]}
+         "routes": [{"retailer": "pbandai-nz", "events": ["new_product", "restock"]}]}
       ]
     },
     {
       "name": "MORE TCG ALERTS",
       "channels": [
-        {"name": "lorcana-alerts", "routes": [{"game": "lorcana", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
-        {"name": "magic-alerts", "routes": [{"game": "mtg", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
-        {"name": "riftbound-alerts", "routes": [{"game": "riftbound", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
-        {"name": "dragonball-alerts", "routes": [{"game": "dragonball", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
-        {"name": "yugioh-alerts", "routes": [{"game": "yugioh", "events": ["new_product", "restock", "spotted"], "in_stock": true}]},
-        {"name": "gundam-alerts", "routes": [{"game": "gundam", "events": ["new_product", "restock", "spotted"], "in_stock": true}]}
+        {"name": "lorcana-alerts", "routes": [{"game": "lorcana", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "magic-alerts", "routes": [{"game": "mtg", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "riftbound-alerts", "routes": [{"game": "riftbound", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "dragonball-alerts", "routes": [{"game": "dragonball", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "yugioh-alerts", "routes": [{"game": "yugioh", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "gundam-alerts", "routes": [{"game": "gundam", "events": ["new_product", "restock", "spotted"]}]}
       ]
     }
   ]

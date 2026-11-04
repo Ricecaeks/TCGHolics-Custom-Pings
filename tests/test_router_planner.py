@@ -10,8 +10,9 @@ def route(**kw):
     return {**base, **kw}
 
 
-def event(kind=EventType.RESTOCK, retailer="farmers", store="westgate", franchise="pokemon"):
-    return Event(type=kind, retailer_id=retailer, sku="1", title="t", url="u", store_id=store, franchise=franchise)
+def event(kind=EventType.RESTOCK, retailer="farmers", store="westgate", franchise="pokemon", level="in"):
+    return Event(type=kind, retailer_id=retailer, sku="1", title="t", url="u", store_id=store, franchise=franchise,
+                 new_level=level)
 
 
 def test_store_route_gets_only_its_store():
@@ -48,15 +49,15 @@ def test_default_event_types_exclude_out_of_stock():
     assert not route_matches(route(event_types=["out_of_stock"]), event(EventType.RESTOCK))
 
 
-def test_in_stock_only_route_skips_sold_out_new_listings_but_not_restocks():
-    r = route(store_id=ONLINE, franchise="pokemon", in_stock_only=True)
-    sold_out = Event(type=EventType.NEW_PRODUCT, retailer_id="ocare", sku="1", title="t", url="u", store_id=ONLINE,
-                     franchise="pokemon", new_level="out")
-    buyable = Event(type=EventType.NEW_PRODUCT, retailer_id="ocare", sku="1", title="t", url="u", store_id=ONLINE,
-                    franchise="pokemon", new_level="in")
-    assert not route_matches(r, sold_out) and route_matches(r, buyable)
-    assert route_matches(route(store_id=ONLINE), sold_out)  # retailer channels still get every new listing
-    assert route_matches(r, event(store=ONLINE))  # a restock
+def test_every_alert_needs_stock():
+    for r in (route(), route(retailer_id="farmers", store_id=ONLINE), route(store_id=ONLINE, in_stock_only=True)):
+        for kind in (EventType.NEW_PRODUCT, EventType.PRICE_CHANGE, EventType.QTY_CHANGE):
+            for level in ("out", "unknown", None):
+                assert not route_matches(r, event(kind, store=ONLINE, level=level)), (r, kind, level)
+            assert route_matches(r, event(kind, store=ONLINE, level="in"))
+            assert route_matches(r, event(kind, store=ONLINE, level="low"))
+    # The opt-in out-of-stock alert is about having none.
+    assert route_matches(route(event_types=["out_of_stock"]), event(EventType.OUT_OF_STOCK, level="out"))
 
 
 def test_match_routes_returns_all_matches():
@@ -139,9 +140,9 @@ def test_unknown_adapters_and_retailers_are_skipped():
 
 def test_route_keywords_filter_titles():
     r = route(keywords="30th booster bundle, elite trainer box, -sleeves")
-    hit = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="1", url="u", title="Pokemon 30th Booster Bundle")
-    miss = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="2", url="u", title="Pokemon Booster Pack")
-    sleeves = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="3", url="u", title="Elite Trainer Box Sleeves")
+    hit = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="1", url="u", title="Pokemon 30th Booster Bundle", new_level="in")
+    miss = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="2", url="u", title="Pokemon Booster Pack", new_level="in")
+    sleeves = Event(type=EventType.NEW_PRODUCT, retailer_id="x", sku="3", url="u", title="Elite Trainer Box Sleeves", new_level="in")
     assert route_matches(r, hit) and not route_matches(r, miss) and not route_matches(r, sleeves)
 
 

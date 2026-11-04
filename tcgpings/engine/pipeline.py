@@ -64,6 +64,13 @@ class Pipeline:
                 prev = await queries.apply_state(
                     conn, product.retailer_id, product.sku, ONLINE, product.online, product.price_cents
                 )
+                if prev is None and product.online.level.available and announced is None:
+                    # Listed without stock info (Farmers tiles) and announced recently: that alert was held
+                    # back for having no stock, so the first in-stock reading is the new listing.
+                    announced = await queries.announced_within(
+                        conn, product.retailer_id, product.sku, NEW_DROP_SECONDS)
+                    if announced:
+                        events.append(new_product_event(product))
                 changes = diff_state(product, ONLINE, None, prev, product.online, product.price_cents)
                 # Single cards reprice constantly: the change is recorded, but not worth an alert.
                 events += [e for e in changes if not (e.type is EventType.PRICE_CHANGE and is_single_card(product.title))]
