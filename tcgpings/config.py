@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     alert_webhook_url: str = ""
     # The leader creates channels and routes for newly enabled retailers by itself (same as /setup).
     auto_setup: bool = True
+    # Link and sync the alert channels in tcgpings/discord/layout.json every 10 minutes.
+    channel_layout: bool = True
 
     default_sku_interval: int = 60
     default_search_interval: int = 300

@@ -405,14 +405,16 @@ async def add_route(
     role_id: int | None = None,
     keywords: str | None = None,
     member_pings: bool = False,
+    layout_channel: str | None = None,
 ) -> int:
     return await db.fetchval(
         """
         INSERT INTO routes (retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords,
-                            member_pings)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id
+                            member_pings, layout_channel)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
         """,
         retailer_id, store_id, franchise, event_types, channel_id, webhook_url, role_id, keywords or None, member_pings,
+        layout_channel,
     )
 
 

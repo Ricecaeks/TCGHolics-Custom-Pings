@@ -1,0 +1,65 @@
+{
+  "_help": "Which Discord channel gets which alerts. The bot links each channel's webhook and keeps its routes in sync every 10 minutes (or /layout apply). A channel can have several routes; an alert posts once per channel. Route fields: retailer (id) or adapter (every retailer using it), store (online | instore), game (pokemon, one_piece, riftbound, mtg, lorcana, yugioh, gundam, dragonball), events (new_product, restock, qty_change, price_change, out_of_stock, spotted; default all but out_of_stock), keywords, role (role id to ping). 'was' lists old names to rename from.",
+  "categories": [
+    {
+      "name": "STORE ALERTS (ALL TCG)",
+      "channels": [
+        {"name": "kmart-online", "was": ["kmart"], "topic": "Kmart online: new listings, stock and price",
+         "routes": [{"retailer": "kmart", "store": "online"}]},
+        {"name": "kmart-instore", "topic": "Kmart in-store stock, every store",
+         "routes": [{"retailer": "kmart", "store": "instore"}]},
+        {"name": "farmers-online", "was": ["farmers"], "topic": "Farmers online: new listings, stock and price",
+         "routes": [{"retailer": "farmers", "store": "online"}]},
+        {"name": "farmers-instore", "topic": "Farmers in-store stock, every store",
+         "routes": [{"retailer": "farmers", "store": "instore"}]},
+        {"name": "jbhifi-online", "topic": "JB Hi-Fi online: new listings, stock and price",
+         "routes": [{"retailer": "jbhifi", "store": "online"}]},
+        {"name": "jbhifi-instore", "topic": "JB Hi-Fi in-store stock, every store",
+         "routes": [{"retailer": "jbhifi", "store": "instore"}]},
+        {"name": "toyworld-online", "topic": "Toyworld online: new listings, stock and price",
+         "routes": [{"retailer": "toyworld", "store": "online"}]},
+        {"name": "toyworld-instore", "topic": "Toyworld in-store stock, every store",
+         "routes": [{"retailer": "toyworld", "store": "instore"}]},
+        {"name": "the-warehouse", "topic": "The Warehouse: online and nationwide in-store",
+         "routes": [{"retailer": "warehouse"}]},
+        {"name": "paper-plus", "topic": "Paper Plus online",
+         "routes": [{"retailer": "paperplus"}]},
+        {"name": "whitcoulls", "topic": "Whitcoulls online and in-store",
+         "routes": [{"retailer": "whitcoulls"}]},
+        {"name": "card-shop-sites", "topic": "NZ card shops online",
+         "routes": [{"adapter": "shopify"}, {"retailer": "retrospace"}]}
+      ]
+    },
+    {
+      "name": "POKÉMON ALERTS",
+      "channels": [
+        {"name": "pokemon-online-shops", "topic": "Pokémon in stock online, any store",
+         "routes": [{"game": "pokemon", "store": "online", "events": ["new_product", "restock"]}]},
+        {"name": "pokemon-store-restocks", "topic": "Pokémon showing in stock at a physical store",
+         "routes": [{"game": "pokemon", "store": "instore", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "pokemon-jb-hifi", "topic": "Pokémon at JB Hi-Fi, online and in-store",
+         "routes": [{"retailer": "jbhifi", "game": "pokemon", "events": ["new_product", "restock"]}]}
+      ]
+    },
+    {
+      "name": "ONE PIECE ALERTS",
+      "channels": [
+        {"name": "onepiece-online-shops", "topic": "One Piece in stock online, any store",
+         "routes": [{"game": "one_piece", "store": "online", "events": ["new_product", "restock"]}]},
+        {"name": "onepiece-store-restocks", "topic": "One Piece showing in stock at a physical store",
+         "routes": [{"game": "one_piece", "store": "instore", "events": ["new_product", "restock", "spotted"]}]}
+      ]
+    },
+    {
+      "name": "MORE TCG ALERTS",
+      "channels": [
+        {"name": "lorcana-alerts", "routes": [{"game": "lorcana", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "magic-alerts", "routes": [{"game": "mtg", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "riftbound-alerts", "routes": [{"game": "riftbound", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "dragonball-alerts", "routes": [{"game": "dragonball", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "yugioh-alerts", "routes": [{"game": "yugioh", "events": ["new_product", "restock", "spotted"]}]},
+        {"name": "gundam-alerts", "routes": [{"game": "gundam", "events": ["new_product", "restock", "spotted"]}]}
+      ]
+    }
+  ]
+}

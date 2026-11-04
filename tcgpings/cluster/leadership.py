@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tcgpings.context import Context
-from tcgpings.db import queries
+from tcgpings.db import queries
+
+
 from tcgpings.retailers import REGISTRY
 from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.engine.planner import plan_jobs
@@ -22,7 +24,8 @@ RECONCILE_SECONDS = 30
 HEALTH_SECONDS = 60
 MAINTENANCE_SECONDS = 24 * 3600
 ADAPTER_STALE_SECONDS = 30 * 60
-AUTO_SETUP_SECONDS = 10 * 60
+AUTO_SETUP_SECONDS = 10 * 60
+
 NEWS_SCAN_SECONDS = 3 * 3600
 ROUTES_DOWN_SECONDS = 24 * 3600
 
@@ -37,6 +40,8 @@ async def lead(ctx: Context) -> None:
         tasks.append(bot.start(ctx.settings.discord_token))
         if ctx.settings.auto_setup and ctx.settings.guild_id:
             tasks.append(auto_setup_loop(ctx, bot))
+        if ctx.settings.channel_layout and ctx.settings.guild_id:
+            tasks.append(layout_loop(ctx, bot))
         if ctx.settings.log_channel_id:
             tasks.append(news_loop(ctx, bot))
     else:
@@ -123,6 +128,29 @@ async def auto_setup_loop(ctx: Context, bot) -> None:
                 await bot.notify_staff(f"🛠️ Auto-setup: {result.summary()}")
         except Exception:
             log.exception("auto-setup failed")
+        await asyncio.sleep(AUTO_SETUP_SECONDS)
+
+
+async def layout_loop(ctx: Context, bot) -> None:
+    """Keep the alert channels in layout.json linked: webhooks, routes, and new or renamed channels."""
+    from tcgpings.discord.commands import run_layout
+
+    await bot.wait_until_ready()
+    reported: list[str] = []
+    while True:
+        try:
+            guild = bot.get_guild(ctx.settings.guild_id)
+            if guild is not None:
+                plan, result = await run_layout(ctx, guild, bot.user)
+                problems = result.problems if result else plan.problems
+                if result is not None and result.changed:
+                    log.info("layout: %s", result.summary())
+                    await bot.notify_staff(f"🛠️ Alert channels: {result.summary()}")
+                elif problems and problems != reported:
+                    await bot.notify_staff("⚠️ Alert channels:" + "".join(f"\n{p}" for p in problems))
+                reported = problems
+        except Exception:
+            log.exception("channel layout failed")
         await asyncio.sleep(AUTO_SETUP_SECONDS)
 
 
