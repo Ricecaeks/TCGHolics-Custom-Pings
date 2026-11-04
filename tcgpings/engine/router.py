@@ -7,7 +7,22 @@ from typing import Any
 from tcgpings.classify import FRANCHISE_NAMES
 from tcgpings.db import queries
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.models import ANY_STORE, DEFAULT_EVENT_TYPES, ONLINE, Event, EventType
+from tcgpings.models import (
+    ANY_STORE,
+    DEFAULT_EVENT_TYPES,
+    ONLINE,
+    Event,
+    EventType,
+    Level,
+)
+
+# Alerts that report a state other than "can be bought now": the opt-in out-of-stock alert.
+NO_STOCK_NEEDED = frozenset({EventType.OUT_OF_STOCK})
+
+
+def has_stock(event: Event) -> bool:
+    """Can it be bought (online) or found on the shelf (in store) right now?"""
+    return event.new_level in (Level.IN, Level.LOW)
 
 
 def route_matches(route: Mapping[str, Any], event: Event) -> bool:
@@ -23,8 +38,8 @@ def route_matches(route: Mapping[str, Any], event: Event) -> bool:
         return False
     if route["franchise"] is not None and route["franchise"] != event.franchise:
         return False
-    if route.get("in_stock_only") and event.type is EventType.NEW_PRODUCT and event.new_level not in ("in", "low"):
-        return False  # a new listing that's sold out or unavailable: its restock will alert instead
+    if event.type not in NO_STOCK_NEEDED and not has_stock(event):
+        return False  # sold out or unknown: a new listing alerts when it comes into stock, a price change is noise
     allowed = route["event_types"]
     if allowed is None:
         if event.type not in DEFAULT_EVENT_TYPES:
