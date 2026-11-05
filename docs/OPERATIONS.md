@@ -69,6 +69,8 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 | Keyword search | 300 s | `interval:` on the watch |
 | Store list sync | 24 h | `STORE_SYNC_INTERVAL` in `.env` |
 
+Each retailer has one keyword-search job (`search:<retailer>`) that runs all its keyword watches. It runs as often as the fastest of those watches, so a short `interval:` on one keyword watch makes every keyword at that retailer run that often. If one keyword's search fails, the others are still recorded; the job only shows as failing when every keyword failed. A keyword added to a retailer whose search job has already run gets its own silent baseline on its first run, as before.
+
 Repeat alerts for the same product, store and state are suppressed for 15 minutes (`ALERT_COOLDOWN_SECONDS`), so stock flickering in and out doesn't spam channels.
 
 ## Moving to the cloud

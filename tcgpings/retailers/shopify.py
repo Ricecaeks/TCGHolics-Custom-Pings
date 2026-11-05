@@ -76,26 +76,54 @@ class ShopifyAdapter(RetailerAdapter):
         return f"{self.base}/cart/{variant_id}:1" if variant_id else None
 
     async def search(self, query: str) -> list[Product]:
-        found: dict[str, Product] = {}
-        try:
-            suggested = await self._suggest(query)
-        except FetchError:
-            suggested = []  # some older themes disable predictive search; the catalogue scan still runs
-        for raw in suggested:
-            if matches_query(" ".join([raw.get("title", ""), raw.get("type", ""), *_tags(raw)]), query):
-                found[raw["handle"]] = self.parse_suggest_product(raw)
+        suggested = await self._suggest_or_empty(query)
+        return self._match(query, suggested, await self._read_catalogue())
 
+    async def search_many(self, queries: list[str]) -> dict[str, list[Product] | Exception]:
+        """Every query in one pass: the catalogue pages are read once and shared, then one suggest call each."""
+        queries = list(dict.fromkeys(queries))
+        try:
+            catalogue = await self._read_catalogue()
+        except Exception as exc:  # noqa: BLE001 - reported per query, as search_many promises
+            return {q: exc for q in queries}  # each search() would have failed on the same pages
+        results: dict[str, list[Product] | Exception] = {}
+        for query in queries:
+            try:
+                suggested = await self._suggest_or_empty(query)
+            except Exception as exc:  # noqa: BLE001 - one keyword's failure mustn't stop the rest
+                results[query] = exc
+                continue
+            results[query] = self._match(query, suggested, catalogue)
+        return results
+
+    async def _suggest_or_empty(self, query: str) -> list[dict]:
+        try:
+            return await self._suggest(query)
+        except FetchError:
+            return []  # some older themes disable predictive search; the catalogue scan still runs
+
+    async def _read_catalogue(self) -> list[dict]:
+        """The first `catalogue_pages` pages of /products.json (most recently updated first)."""
+        catalogue: list[dict] = []
         for page in range(1, self.catalogue_pages + 1):
             data = await self.http.get_json(
                 self.policy, f"{self.base}/products.json", params={"limit": "250", "page": str(page)}
             )
             products = data.get("products") or []
-            for raw in products:
-                text = " ".join([raw.get("title", ""), raw.get("product_type", ""), *_tags(raw)])
-                if matches_query(text, query):
-                    found[raw["handle"]] = self.parse_catalogue_product(raw)
+            catalogue.extend(products)
             if len(products) < 250:
                 break
+        return catalogue
+
+    def _match(self, query: str, suggested: list[dict], catalogue: list[dict]) -> list[Product]:
+        found: dict[str, Product] = {}
+        for raw in suggested:
+            if matches_query(" ".join([raw.get("title", ""), raw.get("type", ""), *_tags(raw)]), query):
+                found[raw["handle"]] = self.parse_suggest_product(raw)
+        for raw in catalogue:
+            text = " ".join([raw.get("title", ""), raw.get("product_type", ""), *_tags(raw)])
+            if matches_query(text, query):
+                found[raw["handle"]] = self.parse_catalogue_product(raw)
         return list(found.values())
 
     async def fetch_products(self, skus: list[str]) -> list[Product]:

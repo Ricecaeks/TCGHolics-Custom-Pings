@@ -57,6 +57,21 @@ class RetailerAdapter(ABC):
     async def search(self, query: str) -> list[Product]:
         """Products matching the query, with online stock and price where available."""
 
+    async def search_many(self, queries: list[str]) -> dict[str, list[Product] | Exception]:
+        """search() for several queries in one job. A query that failed maps to its exception.
+
+        The default runs search() once per query, one after another, so adapters that don't override
+        it make exactly the requests they always did. Adapters whose search re-reads the same pages for
+        every query (Shopify's catalogue) override it to read them once.
+        """
+        results: dict[str, list[Product] | Exception] = {}
+        for query in dict.fromkeys(queries):
+            try:
+                results[query] = await self.search(query)
+            except Exception as exc:  # noqa: BLE001 - one keyword's failure mustn't stop the rest
+                results[query] = exc
+        return results
+
     @abstractmethod
     async def fetch_products(self, skus: list[str]) -> list[Product]:
         """Current online stock and price for specific products."""

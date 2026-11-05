@@ -14,7 +14,7 @@ Monitors NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lor
 
 Every node runs the same container. Nodes coordinate only through Postgres:
 
-- **Jobs.** Each watched product or keyword search is a row in `jobs`. Nodes claim due jobs with `FOR UPDATE SKIP LOCKED` and a short lease. When a node dies, its leases expire and other nodes take over the work.
+- **Jobs.** Each watched product is a row in `jobs`, and so is each retailer's keyword search (one job runs every keyword for that retailer). Nodes claim due jobs with `FOR UPDATE SKIP LOCKED` and a short lease. When a node dies, its leases expire and other nodes take over the work.
 - **Leader.** One node holds a Postgres advisory lock. It runs the Discord bot, turns watches into jobs, prunes old data and takes the nightly backup. If it dies, another node takes over in about 10–15 s.
 - **Exactly-once alerts.** The state change and the alert are written in one transaction, protected by a row lock and a dedupe key, so one change produces one Discord message.
 - **Polite fetching.** Rate limits are set per retailer and split across nodes that share an IP. Optional proxy pool with ban detection.
@@ -76,6 +76,6 @@ docker compose -f deploy/docker-compose.dev.yml --profile cluster up --build --s
 ### Adding a retailer
 
 1. Recon: open the site in a browser with devtools on the Network tab. Find the JSON calls behind search, the product page and "check stock in store". Record them in `docs/RETAILERS.md`.
-2. Add `tcgpings/retailers/<name>.py`: subclass `RetailerAdapter`, decorate it with `@register`, set `default_retailers` and `supports_store_stock`, and implement `search`, `fetch_products`, `list_stores` and `store_stock`.
+2. Add `tcgpings/retailers/<name>.py`: subclass `RetailerAdapter`, decorate it with `@register`, set `default_retailers` and `supports_store_stock`, and implement `search`, `fetch_products`, `list_stores` and `store_stock`. If every search re-reads the same pages, also override `search_many` to read them once for all keywords (as Shopify does).
 3. Import it in `tcgpings/retailers/__init__.py`.
 4. Save real responses under `tests/fixtures/<name>/` and add parser tests.
