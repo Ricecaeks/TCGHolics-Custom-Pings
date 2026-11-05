@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # Each paid route stops for the rest of the month at its own cap: the ScrapFly plan's credits, and
     # the monthly usage limit set in Zyte's dashboard.
     scrapfly_monthly_credits: int = 200_000
-    zyte_monthly_budget_usd: float = 30.0
+    zyte_monthly_budget_usd: float = 70.0  # the rest of the US$100 total after ScrapFly's US$30 plan
     # All paid routes stop at this monthly total (US$), across every retailer; past 80% Farmers checks fewer
     # regions. Each route also stops at its own cap above, and each retailer at its own config
     # "unblocker_monthly_usd" limit (/retailer set unblocker_limit_usd:), so one store can't eat it all.

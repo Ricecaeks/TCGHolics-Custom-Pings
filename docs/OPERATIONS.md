@@ -10,46 +10,40 @@
 - **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, or the database passes 400 MB. It posts ✅ when the problem clears.
 - **On a node:** see [Logs](#logs).
 - **From any machine with `.env`:** `python -m tcgpings admin show` dumps retailers, watches, routes, nodes and job health.
-- **Heartbeat (GGPC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that the bot container is healthy, that some job succeeded in the last 15 minutes, and that no alert has sat unsent for over 15 minutes. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
+- **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, and that no alert has sat unsent for over 15 minutes. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
 
 ## Logs
 
-The bot writes its log to `data/logs/bot.log`, inside the mounted data folder, so it survives restarts and redeploys. On GGPC that's `C:\tcgpings\data\logs\bot.log` (`TCGPINGS_HOME`).
+The bot writes its log to `data/logs/bot.log`, inside the mounted data folder, so it survives restarts and redeploys. On the NUC that's `/opt/tcgpings/data/logs/bot.log` (`TCGPINGS_HOME`).
 
 - A new file starts each day (UTC midnight) or when the file reaches 25 MB. The 7 newest old files are kept as `bot.log.1` (newest) to `bot.log.7`. That's about a week of history, and never more than 200 MB.
 - Change it with `LOG_FILE_MAX_MB` and `LOG_FILE_KEEP` in `.env`. Set `LOG_DIR=` (empty) to turn the file off.
 - Only the bot (`run`) writes the file; `probe`, `admin` and health checks print to the console only.
 
-Reading them on GGPC (PowerShell):
+Reading them on the NUC (`ssh nuc`):
 
-```powershell
-Get-Content C:\tcgpings\data\logs\bot.log -Tail 200 -Wait          # follow live
-Select-String -Path C:\tcgpings\data\logs\bot.log* -Pattern ERROR   # search every day kept
+```bash
+tail -n 200 -F /opt/tcgpings/data/logs/bot.log        # follow live
+grep ERROR /opt/tcgpings/data/logs/bot.log*            # search every day kept
 ```
 
-`docker logs tcgpings-local-node-1 --tail 200 -f` also works, but it only goes back to the last deploy, because every deploy replaces the container. On a NUC: `docker compose -f deploy/docker-compose.yml logs -f --tail 200`, or `data/logs/` in the checkout.
+`docker logs tcgpings-node-1 --tail 200 -f` also works, but it only goes back to the last deploy, because every deploy replaces the container.
 
-## Adding a NUC
-
-Follow SETUP.md step 4 on the new machine, with a new `NODE_NAME`. That's all. The node registers itself and starts claiming jobs within seconds, and the rate limit for nodes sharing an IP is re-split automatically.
-
-## Removing or replacing a NUC
-
-Stop it with `docker compose -f deploy/docker-compose.yml down`. Its jobs move to the other nodes once their leases expire, within 2 minutes, or straight away on a clean stop. The old node shows 🔴 in `/status` for 24 hours and then drops out of the warnings.
+Database shell on the NUC: `docker exec -it tcgpings-db-1 psql -U tcgpings -d tcgpings`.
 
 ## Updating
 
-From a machine that can SSH to the NUCs:
-
-```bash
-scripts/rollout.sh nuc1 nuc2 nuc3
-```
-
-The script updates one node at a time: `git pull`, rebuild, then wait for the node to be healthy before moving to the next. Database migrations apply automatically; the first node to start takes a lock and runs them.
+Merge to `main`. CI runs the tests, then `deploy.yml` rebuilds and restarts the stack on the NUC through its self-hosted runner and waits until every container is healthy. Database migrations apply automatically on start. To redeploy without a code change, run the *deploy* workflow by hand (Actions → deploy → Run workflow).
 
 ## Backups
 
-The leader writes `data/backups/tcgpings-<timestamp>.dump` once a day and keeps the newest 7. Because leadership moves between nodes, check every NUC's `data/backups/` when looking for the latest dump. Copy them somewhere off-site if you can.
+The leader writes `data/backups/tcgpings-<timestamp>.dump` once a day and keeps the newest 7. On the NUC that's `/opt/tcgpings/data/backups/`. Copy them somewhere off-site if you can.
+
+To restore into the NUC's database (stop the bot first: `docker stop tcgpings-node-1`):
+
+```bash
+docker exec -i tcgpings-db-1 pg_restore --clean --if-exists --no-owner -U tcgpings -d tcgpings < /opt/tcgpings/data/backups/tcgpings-YYYYMMDD-HHMMSS.dump
+```
 
 To restore into a fresh Supabase project:
 
