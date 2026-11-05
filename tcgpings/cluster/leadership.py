@@ -17,7 +17,7 @@ from tcgpings.net.chain import spend_limits
 
 from tcgpings.retailers import REGISTRY
 from tcgpings.engine.keywords import KeywordFilter
-from tcgpings.engine.planner import plan_jobs
+from tcgpings.engine.planner import plan_jobs, retailer_sku_interval
 
 log = logging.getLogger(__name__)
 
@@ -83,14 +83,17 @@ async def reconcile(ctx: Context) -> int:
 
 
 async def apply_hot_intervals(ctx: Context) -> None:
-    """Products in a hot set get their retailer's faster checks, and go back to normal when it expires."""
+    """Keep found products' check intervals at their retailer's (see retailer_sku_interval). Products in a
+    hot set get the adapter's faster hot checks, and go back to normal when it expires."""
     hot = [KeywordFilter.parse(w["query"]) for w in await queries.list_hot_watches(ctx.pool)]
     changes = []
     for job in await queries.store_check_jobs(ctx.pool):
         cls = REGISTRY.get(job["adapter"])
-        if cls is None or cls.hot_sku_interval is None:
+        if cls is None:
             continue
-        interval = cls.hot_sku_interval if any(f.matches(job["title"]) for f in hot) else cls.default_sku_interval
+        interval = retailer_sku_interval(job, cls, ctx.settings.default_sku_interval)
+        if cls.hot_sku_interval is not None and any(f.matches(job["title"]) for f in hot):
+            interval = min(interval, cls.hot_sku_interval)
         if interval != job["interval_seconds"]:
             changes.append((job["id"], interval))
     if changes:

@@ -214,3 +214,25 @@ def test_merge_store_events():
     [combined] = restocks
     assert combined.store_name == "2 stores" and [s["id"] for s in combined.stores] == ["14", "21"]
     assert combined.store_id.startswith("*")
+
+
+def test_retailer_sku_interval_override_and_fallbacks():
+    from types import SimpleNamespace
+
+    from tcgpings.engine.planner import retailer_sku_interval
+
+    with_default, without = SimpleNamespace(default_sku_interval=300), SimpleNamespace(default_sku_interval=None)
+    assert retailer_sku_interval({"config": {"sku_interval": 600}}, with_default, 60) == 600
+    assert retailer_sku_interval({"config": {}}, with_default, 60) == 300
+    assert retailer_sku_interval({"config": None}, without, 60) == 60
+    for bad in (10, "600", True, 60.5):  # too fast, or not a whole number of seconds
+        assert retailer_sku_interval({"config": {"sku_interval": bad}}, with_default, 60) == 300
+
+
+def test_sku_watch_uses_the_retailers_check_interval_unless_the_watch_sets_one():
+    shop = {**retailer("a"), "config": {"sku_interval": 900}}
+    jobs = plan([shop], [watch(1, kind="sku", query="x1", retailer_id="a"),
+                         watch(2, kind="sku", query="x2", retailer_id="a", interval=120)])
+    assert jobs["sku:a:x1"]["interval"] == 900
+    assert jobs["sku:a:x2"]["interval"] == 120
+    assert plan([retailer("a")], [watch(1, kind="sku", query="x1", retailer_id="a")])["sku:a:x1"]["interval"] == 60

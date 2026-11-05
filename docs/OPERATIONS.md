@@ -73,6 +73,8 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 
 Each retailer's jobs run in one **lane**: `browser` for the stores that use Chrome or the paid unblockers (Farmers, Kmart, Mighty Ape, Pokémon Center, The Warehouse), `http` for the rest. A node only claims jobs in its own lanes, so slow Chrome jobs can't keep the quick stores waiting. To move one store to the other lane, use `/retailer set retailer:<id> lane:http` (or `lane:browser`); `lane:default` goes back to its adapter's lane. This sets the `lane` key of the retailer's config. The lanes are listed in `tcgpings/cluster/lanes.py`.
 
+Each store's products are checked as often as its adapter says (5 minutes for most). To check one store's products less often, for example a store whose checks are slow and keep falling behind, use `/retailer set retailer:<id> check_minutes:10`; `check_minutes:0` goes back to the adapter's default. This sets the `sku_interval` key of the retailer's config (in seconds). The leader applies it to every product job of that store within a minute. A watch with its own interval keeps it, and products in a hot set still get the faster hot checks.
+
 Settings per container (set in `deploy/docker-compose.nuc.yml`, which overrides `.env`):
 
 | Setting | Default | What it does |

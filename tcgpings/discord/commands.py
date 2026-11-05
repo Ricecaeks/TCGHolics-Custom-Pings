@@ -19,6 +19,7 @@ from tcgpings.db import queries
 from tcgpings.discord import layout, setup
 from tcgpings.discord.embeds import sample_event
 from tcgpings.engine.keywords import KeywordFilter
+from tcgpings.engine.planner import SKU_INTERVAL_KEY
 from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, slugify
 from tcgpings.net.chain import spend_limits
 from tcgpings.net.http import SPEND_LIMIT_KEY
@@ -480,7 +481,8 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
     @app_commands.choices(proxy_policy=[app_commands.Choice(name=p, value=p) for p in ("direct", "pool", "sticky")])
     @app_commands.choices(lane=[app_commands.Choice(name=n, value=n) for n in (*LANES, LANE_DEFAULT)])
     @app_commands.describe(unblocker_limit_usd="This store's own monthly cap on paid unblocker spend (US$); 0 removes it",
-                           lane="Which workers run its jobs (http or browser); default goes back to its adapter's")
+                           lane="Which workers run its jobs (http or browser); default goes back to its adapter's",
+                           check_minutes="Minutes between its product checks; 0 goes back to its adapter's default")
     async def set(
         self,
         interaction: discord.Interaction,
@@ -490,6 +492,7 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
         requests_per_minute: app_commands.Range[int, 1, 600] | None = None,
         unblocker_limit_usd: app_commands.Range[float, 0, 1000] | None = None,
         lane: app_commands.Choice[str] | None = None,
+        check_minutes: app_commands.Range[int, 0, 1440] | None = None,
     ) -> None:
         ctx = _ctx(interaction)
         ok = await queries.update_retailer(
@@ -503,6 +506,9 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
         if lane is not None:  # the lane its jobs run in; "default" goes back to its adapter's
             ok = await queries.set_retailer_config(
                 ctx.pool, retailer, LANE_KEY, None if lane.value == LANE_DEFAULT else lane.value) or ok
+        if check_minutes is not None:  # how often its products are checked; the leader applies it within a minute
+            ok = await queries.set_retailer_config(
+                ctx.pool, retailer, SKU_INTERVAL_KEY, check_minutes * 60 or None) or ok
         await ctx.adapters.refresh(force=True)
         await _reply(interaction, f"Updated `{retailer}`." if ok else f"Nothing changed for `{retailer}`.")
 
