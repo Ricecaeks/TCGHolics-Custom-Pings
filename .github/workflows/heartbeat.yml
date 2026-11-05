@@ -48,15 +48,19 @@ jobs:
           exit $failed
       - name: Check the job queue keeps up
         run: |
-          # Read-only. Due jobs waiting for a worker (enabled, unpaused, at an enabled retailer, not running):
-          # the oldest must be under 20 minutes late, or the workers aren't keeping up.
+          # Read-only. Due jobs waiting for a worker (enabled, unpaused, at an enabled retailer, not running).
+          # Fails when jobs at 2 or more stores are over 20 minutes late: the workers as a whole aren't
+          # keeping up. One slow store on its own (e.g. a site that makes every check slow) is reported by
+          # the leader in the log channel and /status instead, so it can't raise a false "offline" alarm.
           sql="SELECT count(*) FILTER (WHERE j.next_run_at < now() - make_interval(mins => 20)),
-            coalesce(floor(extract(epoch FROM now() - min(j.next_run_at)) / 60)::int, 0)
+            count(DISTINCT j.retailer_id) FILTER (WHERE j.next_run_at < now() - make_interval(mins => 20)),
+            coalesce(floor(extract(epoch FROM now() - min(j.next_run_at)) / 60)::int, 0),
+            coalesce(string_agg(DISTINCT j.retailer_id, ', ') FILTER (WHERE j.next_run_at < now() - make_interval(mins => 20)), '')
             FROM jobs j JOIN retailers r ON r.id = j.retailer_id
             WHERE j.enabled AND r.enabled AND j.paused_at IS NULL AND j.next_run_at <= now()
               AND (j.lease_until IS NULL OR j.lease_until < now())"
-          out=$(docker exec tcgpings-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c "$sql") \
-            || { echo "::error::database query failed"; exit 1; }
-          IFS='|' read -r late worst <<< "$out"
-          echo "jobs over 20 min late: $late; oldest waiting: $worst min"
-          if [ "$late" -gt 0 ]; then echo "::error::$late job(s) over 20 minutes overdue (oldest $worst min)"; exit 1; fi
+          out=$(docker exec tcgpings-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c "$sql")             || { echo "::error::database query failed"; exit 1; }
+          IFS='|' read -r late stores worst names <<< "$out"
+          echo "jobs over 20 min late: $late at $stores store(s) ${names:+($names)}; oldest waiting: $worst min"
+          if [ "$stores" -ge 2 ]; then echo "::error::$late job(s) at $stores stores over 20 minutes overdue (oldest $worst min): $names"; exit 1; fi
+          if [ "$late" -gt 0 ]; then echo "::warning::$late job(s) at $names over 20 minutes overdue (oldest $worst min)"; fi
