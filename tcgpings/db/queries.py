@@ -590,7 +590,7 @@ async def claim_alerts(db: DB, node: str, limit: int, lease_seconds: int = 60) -
         UPDATE alert_outbox o SET lease_owner = $1, lease_until = now() + make_interval(secs => $3)
         FROM due, routes r
         WHERE o.id = due.id AND r.id = o.route_id
-        RETURNING o.id, o.payload, o.attempts, r.webhook_url, r.role_id, r.channel_id
+        RETURNING o.id, o.payload, o.attempts, o.sent_parts, r.webhook_url, r.role_id, r.channel_id
         """,
         node, limit, float(lease_seconds),
     )
@@ -601,6 +601,11 @@ async def mark_alert_sent(db: DB, alert_id: int) -> None:
         "UPDATE alert_outbox SET sent_at = now(), lease_owner = NULL, lease_until = NULL WHERE id = $1",
         alert_id,
     )
+
+
+async def mark_alert_part_sent(db: DB, alert_id: int, sent_parts: int) -> None:
+    """Record that the first `sent_parts` messages of a multi-message alert were posted."""
+    await db.execute("UPDATE alert_outbox SET sent_parts = $2 WHERE id = $1", alert_id, sent_parts)
 
 
 async def mark_alert_failed(db: DB, alert_id: int, error: str, retry_in: float) -> None:

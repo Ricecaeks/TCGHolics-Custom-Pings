@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 import aiohttp
 import discord
@@ -41,21 +42,38 @@ async def sender_loop(ctx: Context) -> None:
 async def send_batch(ctx: Context, session: aiohttp.ClientSession) -> int:
     rows = await queries.claim_alerts(ctx.pool, ctx.node_name, BATCH)
     for row in rows:
-        event = Event.from_payload(row["payload"])
         try:
-            await deliver(ctx, session, event, row["webhook_url"], row["role_id"])
+            event = Event.from_payload(row["payload"])
+
+            async def part_sent(parts: int) -> None:
+                await queries.mark_alert_part_sent(ctx.pool, row["id"], parts)
+
+            await deliver(
+                ctx, session, event, row["webhook_url"], row["role_id"],
+                sent_parts=row["sent_parts"], on_part_sent=part_sent,
+            )
         except discord.NotFound:
             await queries.mark_alert_failed(ctx.pool, row["id"], "webhook deleted", 3600)
             log.error("webhook for channel %s no longer exists; re-run /route set there", row["channel_id"])
             continue
         except (discord.HTTPException, aiohttp.ClientError, asyncio.TimeoutError) as exc:
-            delay = min(10 * 2 ** row["attempts"], 1800)
-            await queries.mark_alert_failed(ctx.pool, row["id"], str(exc), delay)
+            await queries.mark_alert_failed(ctx.pool, row["id"], str(exc), _backoff(row["attempts"]))
             log.warning("alert %s failed (attempt %d): %s", row["id"], row["attempts"] + 1, exc)
+            continue
+        except Exception as exc:
+            # A bad row (say a payload build_embed can't render) must count its attempt, so it
+            # dead-letters after 8 tries instead of failing the batch and blocking the rows behind it.
+            error = f"{type(exc).__name__}: {exc}"
+            await queries.mark_alert_failed(ctx.pool, row["id"], error, _backoff(row["attempts"]))
+            log.exception("alert %s could not be sent (attempt %d)", row["id"], row["attempts"] + 1)
             continue
         await queries.mark_alert_sent(ctx.pool, row["id"])
         ctx.stats.alerts_sent += 1
     return len(rows)
+
+
+def _backoff(attempts: int) -> float:
+    return min(10 * 2 ** attempts, 1800)
 
 
 def ping_messages(pings: list[dict] | None) -> list[tuple[str, list[int]]]:
@@ -90,8 +108,14 @@ def ping_messages(pings: list[dict] | None) -> list[tuple[str, list[int]]]:
 
 
 async def deliver(
-    ctx: Context, session: aiohttp.ClientSession, event: Event, webhook_url: str, role_id: int | None
+    ctx: Context, session: aiohttp.ClientSession, event: Event, webhook_url: str, role_id: int | None,
+    sent_parts: int = 0, on_part_sent: Callable[[int], Awaitable[None]] | None = None,
 ) -> None:
+    """Post the alert: the embed (with the role and first ping message), then any overflow ping messages.
+
+    Skips the first `sent_parts` messages, which an earlier attempt already posted, and reports each one
+    posted to `on_part_sent` so a retry after a later message fails doesn't ping anyone twice.
+    """
     embed = build_embed(event)
     role = f"<@&{role_id}>" if role_id else None
     messages = ping_messages(event.extra.get("pings"))
@@ -101,11 +125,14 @@ async def deliver(
         fields = ", ".join(f"{f.name}={f.value}" for f in embed.fields)
         log.info("[dry-run] %s | %s | %s | %s %s", embed.author.name, embed.title, embed.description, fields, content or "")
         return
+    parts = [dict(content=content, embed=embed, allowed_mentions=_mentions(tagged, role_id))]
+    parts += [dict(content=text, allowed_mentions=_mentions(users)) for text, users in messages[1:]]
     webhook = discord.Webhook.from_url(webhook_url, session=session)
-    # wait=True makes Discord confirm the post, so a failed one raises and is retried.
-    await webhook.send(content=content, embed=embed, allowed_mentions=_mentions(tagged, role_id), wait=True)
-    for text, users in messages[1:]:
-        await webhook.send(content=text, allowed_mentions=_mentions(users), wait=True)
+    for number, part in enumerate(parts[sent_parts:], start=sent_parts + 1):
+        # wait=True makes Discord confirm the post, so a failed one raises and is retried.
+        await webhook.send(**part, wait=True)
+        if on_part_sent and number < len(parts):
+            await on_part_sent(number)
 
 
 def _mentions(users: list[int], role_id: int | None = None) -> discord.AllowedMentions:
