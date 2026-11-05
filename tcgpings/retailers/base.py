@@ -65,6 +65,14 @@ class RetailerAdapter(ABC):
         """The retailer's current TCG range, newest first where possible."""
         return []
 
+    def scan_size(self, results: list[Product]) -> int | None:
+        """How many products the last discover() parsed off the site, to spot a parser the site broke.
+
+        None when that call didn't read the site (nothing was due yet), so it isn't counted. Adapters
+        that pad results (products that left the listings) or vary how much they read override this.
+        """
+        return sum(1 for p in results if not p.kind)
+
     @property
     def store_stock_enabled(self) -> bool:
         """Instance-level switch (e.g. Farmers only does store stock when its browser is on)."""

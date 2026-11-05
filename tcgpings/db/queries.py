@@ -275,6 +275,51 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
     )
 
 
+# --- discovery scans -------------------------------------------------------------------
+
+SCAN_KEEP_DAYS = 7
+
+
+async def record_discover_scan(db: DB, retailer_id: str, products: int, sealed: int) -> None:
+    """How many products a discovery scan parsed (and how many were sealed TCG); keeps a week of them."""
+    await db.execute(
+        "INSERT INTO discover_scans (retailer_id, products, sealed) VALUES ($1, $2, $3)",
+        retailer_id, products, sealed,
+    )
+    await db.execute(
+        "DELETE FROM discover_scans WHERE retailer_id = $1 AND scanned_at < now() - make_interval(days => $2)",
+        retailer_id, SCAN_KEEP_DAYS,
+    )
+
+
+async def discover_health(db: DB, history: int) -> list[asyncpg.Record]:
+    """Each enabled retailer's discovery job: its latest scan's count, the median of the `history` scans
+    before that (`usual`, over `scans` of them), and seconds since the job last succeeded (or was created)."""
+    return await db.fetch(
+        """
+        SELECT j.retailer_id, j.interval_seconds, j.consecutive_failures,
+               extract(epoch FROM now() - coalesce(j.last_ok_at, j.created_at))::float8 AS ok_age,
+               j.last_ok_at IS NOT NULL AS ever_ok,
+               last.products, last.scanned_at, prev.usual, coalesce(prev.scans, 0) AS scans
+        FROM jobs j
+        JOIN retailers r ON r.id = j.retailer_id
+        LEFT JOIN LATERAL (
+            SELECT s.id, s.products, s.scanned_at FROM discover_scans s
+            WHERE s.retailer_id = j.retailer_id ORDER BY s.id DESC LIMIT 1
+        ) last ON true
+        LEFT JOIN LATERAL (
+            SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY p.products) AS usual, count(*) AS scans
+            FROM (SELECT s.products FROM discover_scans s
+                  WHERE s.retailer_id = j.retailer_id AND s.id < last.id
+                  ORDER BY s.id DESC LIMIT $1) p
+        ) prev ON true
+        WHERE j.kind = 'discover' AND j.enabled AND r.enabled
+        ORDER BY j.retailer_id
+        """,
+        history,
+    )
+
+
 # --- products & state ------------------------------------------------------------------
 
 

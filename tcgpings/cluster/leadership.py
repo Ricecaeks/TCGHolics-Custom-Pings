@@ -29,6 +29,11 @@ AUTO_SETUP_SECONDS = 10 * 60
 NEWS_SCAN_SECONDS = 3 * 3600
 ROUTES_DOWN_SECONDS = 24 * 3600
 
+SCAN_HISTORY = 10  # the "usual" product count is the median of this many scans before the latest
+SCAN_MIN_HISTORY = 3  # scans needed before a drop is judged against them
+SCAN_DROP_RATIO = 0.5  # a latest scan below this share of the usual count is a drop
+SCAN_STALE_INTERVALS = 3  # no successful discovery for this many check intervals is overdue
+
 
 async def lead(ctx: Context) -> None:
     bot = None
@@ -214,8 +219,61 @@ async def collect_issues(ctx: Context) -> dict[str, str]:
     size = await queries.database_size_mb(ctx.pool)
     if size > s.db_size_warn_mb:
         issues["db:size"] = f"Database is {size:.0f} MB (warning threshold {s.db_size_warn_mb} MB)"
+    scans = scan_issues(await queries.discover_health(ctx.pool, SCAN_HISTORY))
+    # A retailer whose every job fails already has a warning; "discovery is overdue" adds nothing.
+    issues.update({k: v for k, v in scans.items() if f"adapter:{k.split(':', 1)[1]}" not in issues})
     if ctx.http.chain is not None:
         issues.update(await fetch_chain_issues(ctx))
+    return issues
+
+
+def _span(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    return f"{minutes} min" if minutes < 120 else f"{minutes / 60:.1f} h"
+
+
+def scan_issues(rows) -> dict[str, str]:
+    """Discovery scans that "succeeded" but look broken: nothing parsed, far fewer products than usual,
+    or no successful scan for SCAN_STALE_INTERVALS check intervals. Rows come from queries.discover_health.
+
+    An overdue scan whose job keeps failing is that retailer's problem and gets its own warning. Overdue
+    scans whose jobs haven't failed are just waiting for a worker, so they share one "running behind" warning
+    rather than one per retailer.
+    """
+    issues: dict[str, str] = {}
+    queued: list[tuple[float, str]] = []
+    for h in rows:
+        rid = h["retailer_id"]
+        products = h["products"]
+        if products == 0:
+            issues[f"scan:{rid}"] = (
+                f"**{rid}** discovery found 0 products on its last scan — the site may have changed "
+                "and the parser is reading nothing"
+            )
+        elif (products is not None and h["scans"] >= SCAN_MIN_HISTORY and h["usual"]
+              and products < h["usual"] * SCAN_DROP_RATIO):
+            issues[f"scan:{rid}"] = (
+                f"**{rid}** discovery found only {products} products on its last scan, against a usual "
+                f"{h['usual']:.0f} — part of the site may have changed"
+            )
+        limit = SCAN_STALE_INTERVALS * h["interval_seconds"]
+        if h["ok_age"] is None or h["ok_age"] <= limit:
+            continue
+        if not h["consecutive_failures"]:
+            queued.append((h["ok_age"], rid))
+            continue
+        since = f"for {_span(h['ok_age'])}" if h["ever_ok"] else "since it was set up"
+        issues[f"scan-stale:{rid}"] = (
+            f"**{rid}** discovery hasn't completed a scan {since} (it runs every {_span(h['interval_seconds'])}; "
+            f"{h['consecutive_failures']} failed runs in a row)"
+        )
+    if queued:
+        queued.sort(reverse=True)
+        names = ", ".join(rid for _, rid in queued[:5]) + (f" and {len(queued) - 5} more" if len(queued) > 5 else "")
+        issues["scans:behind"] = (
+            f"Discovery is running behind: {len(queued)} retailers have gone over {SCAN_STALE_INTERVALS}× their "
+            f"check interval without a scan, waiting for a free worker (longest {_span(queued[0][0])}: {names})"
+        )
     return issues
 
 
