@@ -7,8 +7,26 @@
   - each retailer: 🟢 healthy, 🟡 some jobs failing or overdue, 🔴 every job failing
   - the alert queue, database size and proxy health
 - **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, or the database passes 400 MB. It posts ✅ when the problem clears.
-- **On a node:** `docker compose -f deploy/docker-compose.yml logs -f --tail 200`
+- **On a node:** see [Logs](#logs).
 - **From any machine with `.env`:** `python -m tcgpings admin show` dumps retailers, watches, routes, nodes and job health.
+- **Heartbeat (GGPC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that the bot container is healthy, that some job succeeded in the last 15 minutes, and that no alert has sat unsent for over 15 minutes. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
+
+## Logs
+
+The bot writes its log to `data/logs/bot.log`, inside the mounted data folder, so it survives restarts and redeploys. On GGPC that's `C:\tcgpings\data\logs\bot.log` (`TCGPINGS_HOME`).
+
+- A new file starts each day (UTC midnight) or when the file reaches 25 MB. The 7 newest old files are kept as `bot.log.1` (newest) to `bot.log.7`. That's about a week of history, and never more than 200 MB.
+- Change it with `LOG_FILE_MAX_MB` and `LOG_FILE_KEEP` in `.env`. Set `LOG_DIR=` (empty) to turn the file off.
+- Only the bot (`run`) writes the file; `probe`, `admin` and health checks print to the console only.
+
+Reading them on GGPC (PowerShell):
+
+```powershell
+Get-Content C:\tcgpings\data\logs\bot.log -Tail 200 -Wait          # follow live
+Select-String -Path C:\tcgpings\data\logs\bot.log* -Pattern ERROR   # search every day kept
+```
+
+`docker logs tcgpings-local-node-1 --tail 200 -f` also works, but it only goes back to the last deploy, because every deploy replaces the container. On a NUC: `docker compose -f deploy/docker-compose.yml logs -f --tail 200`, or `data/logs/` in the checkout.
 
 ## Adding a NUC
 

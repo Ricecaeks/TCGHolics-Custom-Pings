@@ -1,5 +1,7 @@
-# Runs on the bot's own machine, so a success proves the machine is awake and the bot healthy.
-# watchdog.yml runs on GitHub's side and raises the alarm when these successes stop.
+# Runs on the bot's own machine, so a success proves the machine is awake, the bot healthy,
+# and that it's actually working: some job succeeded and no alert sat unsent in the last 15 minutes.
+# A failed run emails the owner; watchdog.yml runs on GitHub's side and raises the alarm in
+# Discord when these successes stop.
 name: heartbeat
 
 on:
@@ -22,3 +24,19 @@ jobs:
           $status = docker inspect -f '{{.State.Health.Status}}' tcgpings-local-node-1
           "bot: $status"
           if ($status -ne 'healthy') { exit 1 }
+      - name: Check jobs and alerts ran recently
+        shell: powershell
+        run: |
+          # Read-only. Alerts that gave up after 8 tries (attempts >= 8) are left out: the leader
+          # already posts about those in the log channel, and they'd fail every beat until purged.
+          $sql = 'SELECT coalesce(floor(extract(epoch FROM now() - max(last_ok_at)) / 60)::int, -1), ' +
+            '(SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts < 8 AND created_at < now() - make_interval(mins => 15)), ' +
+            '(SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts >= 8) FROM jobs'
+          $out = docker exec tcgpings-local-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c $sql
+          if ($LASTEXITCODE -ne 0) { "database query failed"; exit 1 }
+          $jobAge, $stuck, $dead = "$out".Trim().Split('|') | ForEach-Object { [int]$_ }
+          "last successful job: $jobAge min ago; alerts unsent over 15 min: $stuck; given up: $dead"
+          $failed = $false
+          if ($jobAge -lt 0 -or $jobAge -ge 15) { "::error::No job has succeeded in the last 15 minutes"; $failed = $true }
+          if ($stuck -gt 0) { "::error::$stuck alert(s) unsent for over 15 minutes"; $failed = $true }
+          if ($failed) { exit 1 }
