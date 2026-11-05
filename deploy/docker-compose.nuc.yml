@@ -42,7 +42,7 @@ services:
       POSTGRES_DB: tcgpings
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # Connections: control 4 + 1 for leader election + 1 for backups, worker-http 10, worker-browser 4.
+    # Connections: control 4 + 1 for leader election + 1 for backups, worker-http 10, worker-browser 6.
     command: ["postgres", "-c", "shared_buffers=512MB", "-c", "effective_cache_size=4GB",
               "-c", "work_mem=8MB", "-c", "max_connections=100"]
     shm_size: 256m
@@ -87,9 +87,9 @@ services:
       <<: *node-env
       NODE_NAME: nuc-browser
       WORKER_LANES: browser
-      WORKER_CONCURRENCY: "4"
+      WORKER_CONCURRENCY: "6"   # the Warehouse and every other store stay capped at MAX_INFLIGHT_PER_RETAILER (3)
       LEADER_ELIGIBLE: "false"
-      DB_POOL_SIZE: "4"
+      DB_POOL_SIZE: "6"
     shm_size: 1g        # Chrome needs more than Docker's 64 MB default
     mem_limit: 3g
 

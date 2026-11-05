@@ -78,7 +78,7 @@ Settings per container (set in `deploy/docker-compose.nuc.yml`, which overrides 
 | Setting | Default | What it does |
 |---|---|---|
 | `WORKER_LANES` | `http,browser` | Lanes this node claims jobs for. Empty (or `none`): no jobs at all. |
-| `WORKER_CONCURRENCY` | 8 | Jobs this node runs at once (`worker-http` 32, `worker-browser` 4). |
+| `WORKER_CONCURRENCY` | 8 | Jobs this node runs at once (`worker-http` 32, `worker-browser` 6). |
 | `MAX_INFLIGHT_PER_RETAILER` | 3 | Jobs one store may have running at once, across all nodes. Due jobs of a store at its limit wait, and other stores' jobs go first. |
 | `LEADER_ELIGIBLE` | `true` | `false`: this node never becomes leader. On the NUC only `control` may lead. |
 | `DB_POOL_SIZE` | 4 | Database connections per node (`worker-http` 10). |

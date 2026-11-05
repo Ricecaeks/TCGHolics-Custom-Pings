@@ -17,7 +17,7 @@ What's built, what's next, and what's parked. Reviewed 2026-11-06. Each numbered
 | Pokémon Center NZ / AU / UK (Zyte), with queue alerts | live |
 | P-Bandai NZ (its search API) | live |
 | Member `/ping` keywords, `/spotted` reports, hot sets with news-fed approval cards | live |
-| Hosting: the NUC runs everything (nothing on GGPC). A fleet of containers: `control` (leader, Discord, alerts), `worker-http` (32 quick jobs at once), `worker-browser` (4 Chrome / paid jobs), Postgres | live |
+| Hosting: the NUC runs everything (nothing on GGPC). A fleet of containers: `control` (leader, Discord, alerts), `worker-http` (32 quick jobs at once), `worker-browser` (6 Chrome / paid jobs), Postgres | live |
 | Fair scheduling: worker lanes, at most 3 running jobs per store, one keyword-search job per shop, queue-lag alarm | live |
 | Wave 1 reliability: price-flap damping, silent-break alarms, send-queue hardening, paused dead checks, spend per store ($100 total: ScrapFly $30 + Zyte $70), logs on disk, real heartbeat | done |
 
