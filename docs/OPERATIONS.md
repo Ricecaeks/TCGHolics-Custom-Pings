@@ -11,7 +11,7 @@
 - **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, the job queue's oldest due job has waited over 10 minutes, or the database passes 400 MB. It posts ✅ when the problem clears.
 - **On a node:** see [Logs](#logs).
 - **From any machine with `.env`:** `python -m tcgpings admin show` dumps retailers, watches, routes, nodes and job health.
-- **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, that no alert has sat unsent for over 15 minutes, and that no due job (enabled, not paused) has waited over 20 minutes for a worker. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
+- **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, that no alert has sat unsent for over 15 minutes, and that jobs at no more than one store have waited over 20 minutes for a worker (one slow store alone shows as a warning in the run, not a failure). Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
 
 ## Logs
 
@@ -83,7 +83,7 @@ Settings per container (set in `deploy/docker-compose.nuc.yml`, which overrides 
 | `LEADER_ELIGIBLE` | `true` | `false`: this node never becomes leader. On the NUC only `control` may lead. |
 | `DB_POOL_SIZE` | 4 | Database connections per node (`worker-http` 10). |
 
-**Queue lag.** Due jobs are claimed most overdue first. `/status` shows how many are over 2 minutes late and how long the oldest has waited. The leader warns in the staff log when the oldest has waited over 10 minutes, and the heartbeat fails when any has waited over 20. If it keeps happening, check which lane is behind (`/status` per retailer, overdue counts), then raise that worker's `WORKER_CONCURRENCY` or add a copy of it (see the comment at the top of the compose file). On a disabled retailer, or a paused check, nothing counts as late.
+**Queue lag.** Due jobs are claimed most overdue first. `/status` shows how many are over 2 minutes late and how long the oldest has waited. The leader warns in the staff log when the oldest has waited over 10 minutes, and the heartbeat fails when jobs at two or more stores have waited over 20 (one slow store alone is only a warning, so it can't raise a false "offline" alarm). If it keeps happening, check which lane is behind (`/status` per retailer, overdue counts), then raise that worker's `WORKER_CONCURRENCY` or add a copy of it (see the comment at the top of the compose file). On a disabled retailer, or a paused check, nothing counts as late.
 
 ## Tuning check frequency
 
