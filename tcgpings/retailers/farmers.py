@@ -240,7 +240,7 @@ class FarmersAdapter(RetailerAdapter):
     async def _regions_to_check(self) -> set[str] | None:
         """None = no limit. Once the unblocker budget runs low, only the priority regions."""
         regions = set(self.regions) if self.regions else None
-        if self._chain is not None and await self._chain.budget_low():
+        if self._chain is not None and await self._chain.budget_low(self.policy):
             regions = (regions or set(self._region_of.values())) & set(self.priority_regions)
         return regions
 

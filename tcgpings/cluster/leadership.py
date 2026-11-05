@@ -12,6 +12,7 @@ from pathlib import Path
 
 from tcgpings.context import Context
 from tcgpings.db import queries
+from tcgpings.net.chain import spend_limits
 
 
 from tcgpings.retailers import REGISTRY
@@ -278,18 +279,28 @@ def scan_issues(rows) -> dict[str, str]:
 
 
 async def fetch_chain_issues(ctx: Context) -> dict[str, str]:
-    """Only what the chain can't fix itself: the budget running out, or every route down for a day."""
-    s = ctx.settings
+    """Only what the chain can't fix itself: the budget (or a store's own limit) running out, or every route
+    down for a day."""
     chain = ctx.http.chain
     issues: dict[str, str] = {}
     used = await chain.budget_used()
-    spent = used * s.unblocker_monthly_budget_usd
+    cap = chain.cap_usd()  # the total budget, or less when every paid route's own cap is lower
+    spent = used * cap
     if used >= 1:
-        issues["budget:out"] = (f"Unblocker budget used up (${spent:.2f} of ${s.unblocker_monthly_budget_usd:.2f}): "
+        issues["budget:out"] = (f"Unblocker budget used up (${spent:.2f} of ${cap:.2f}): "
                                 "paid routes are paused until next month, the free ones keep going")
     elif used >= chain.low_ratio:
-        issues["budget:low"] = (f"Unblocker spend is ${spent:.2f} of ${s.unblocker_monthly_budget_usd:.2f} this month: "
+        issues["budget:low"] = (f"Unblocker spend is ${spent:.2f} of ${cap:.2f} this month: "
                                 "Farmers store checks are cut back to its priority regions")
+    store_spend: dict[str, float] = {}
+    for r in await queries.month_spend_rows(ctx.pool):
+        store_spend[r["retailer_id"]] = store_spend.get(r["retailer_id"], 0.0) + r["cost_usd"]
+    for retailer_id, limit in spend_limits(await queries.list_retailers(ctx.pool)).items():
+        if store_spend.get(retailer_id, 0.0) >= limit:
+            issues[f"budget:{retailer_id}"] = (
+                f"**{retailer_id}** has used its own unblocker limit (${store_spend[retailer_id]:.2f} of "
+                f"${limit:.2f}): its paid routes are paused until next month, its free ones keep going"
+            )
     by_retailer: dict[str, list] = {}
     for b in await queries.list_breakers(ctx.pool):
         if b["backend"] in chain.backends:

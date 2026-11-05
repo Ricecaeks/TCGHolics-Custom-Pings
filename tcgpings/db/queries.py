@@ -58,6 +58,18 @@ async def update_retailer(db: DB, retailer_id: str, **fields: Any) -> bool:
     return result.endswith(" 1")
 
 
+async def set_retailer_config(db: DB, retailer_id: str, key: str, value: Any) -> bool:
+    """Set one key of a retailer's config, or remove it when `value` is None. Seeded keys are kept."""
+    if value is None:
+        result = await db.execute("UPDATE retailers SET config = config - $2 WHERE id = $1", retailer_id, key)
+    else:
+        result = await db.execute(
+            "UPDATE retailers SET config = config || jsonb_build_object($2::text, $3::jsonb) WHERE id = $1",
+            retailer_id, key, value,
+        )
+    return result.endswith(" 1")
+
+
 # --- stores ----------------------------------------------------------------------------
 
 
@@ -791,31 +803,35 @@ async def list_breakers(db: DB) -> list[asyncpg.Record]:
     )
 
 
-async def add_spend(db: DB, backend: str, usd: float) -> None:
+async def add_spend(db: DB, retailer_id: str, backend: str, usd: float, failed: bool = False) -> None:
+    """Count one billed request; `failed` when the provider billed it but it didn't get the page."""
     await db.execute(
         """
-        INSERT INTO unblocker_spend (month, backend, requests, cost_usd)
-        VALUES (date_trunc('month', now() AT TIME ZONE 'UTC')::date, $1, 1, $2)
-        ON CONFLICT (month, backend) DO UPDATE SET
-            requests = unblocker_spend.requests + 1, cost_usd = unblocker_spend.cost_usd + EXCLUDED.cost_usd
+        INSERT INTO unblocker_spend (month, retailer_id, backend, requests, failed, cost_usd)
+        VALUES (date_trunc('month', now() AT TIME ZONE 'UTC')::date, $1, $2, 1, $4::int, $3)
+        ON CONFLICT (month, retailer_id, backend) DO UPDATE SET
+            requests = unblocker_spend.requests + 1, failed = unblocker_spend.failed + EXCLUDED.failed,
+            cost_usd = unblocker_spend.cost_usd + EXCLUDED.cost_usd
         """,
-        backend, float(usd),
+        retailer_id, backend, float(usd), failed,
     )
 
 
-async def month_spend(db: DB, backend: str | None = None) -> float:
-    """This month's unblocker spend in USD: every backend's, or one backend's."""
+async def month_spend(db: DB, backend: str | None = None, retailer_id: str | None = None) -> float:
+    """This month's unblocker spend in USD: in total, or for one backend and/or one retailer."""
     return float(await db.fetchval(
         "SELECT coalesce(sum(cost_usd), 0) FROM unblocker_spend"
-        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date AND ($1::text IS NULL OR backend = $1)",
-        backend,
+        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date"
+        " AND ($1::text IS NULL OR backend = $1) AND ($2::text IS NULL OR retailer_id = $2)",
+        backend, retailer_id,
     ))
 
 
-async def month_spend_by_backend(db: DB) -> list[asyncpg.Record]:
+async def month_spend_rows(db: DB) -> list[asyncpg.Record]:
+    """This month's spend per retailer and backend ('' = recorded before spend was kept per retailer)."""
     return await db.fetch(
-        "SELECT backend, requests, cost_usd FROM unblocker_spend"
-        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date ORDER BY backend"
+        "SELECT retailer_id, backend, requests, failed, cost_usd FROM unblocker_spend"
+        " WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date ORDER BY retailer_id, backend"
     )
 
 

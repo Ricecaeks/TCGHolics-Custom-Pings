@@ -41,6 +41,7 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 ## Rate limits and blocks
 
 - Each retailer has a cluster-wide **requests per minute** budget (default 30), changed with `/retailer set requests_per_minute:`. Nodes behind the same public IP share the budget. Each additional IP or proxy adds capacity.
+- Paid unblocker spend (ScrapFly, Zyte) is capped at US$100 a month across all retailers. A retailer can also get its own monthly limit with `/retailer set unblocker_limit_usd:` (0 removes it); `/status` shows each one's spend. See HOSTING.md §6.
 - A 403, a 429 or a captcha page counts as **blocked**. The job backs off exponentially, up to 30 minutes.
   - If a retailer stays 🔴, first try lowering its rate.
   - Next, try `proxy_policy:pool`.

@@ -2,20 +2,27 @@
 
 Each backend fetches one URL, or POSTs a body to it (Kmart's JSON gateway), and returns
 (body, cost in USD). They raise:
-- Blocked:       the unblocker couldn't get past the site either (not billed by either service).
+- Blocked:       the unblocker couldn't get past the site either.
 - ProviderError: a problem with the service itself (bad key, out of credit, throttled).
 - FetchError:    with `status` set when the retailer answered (e.g. 404), else a network failure.
+A failure the provider still billed carries that cost in `exc.cost_usd`, so the chain counts it.
 
 ScrapFly (https://scrapfly.io/docs/scrape-api/getting-started)
     GET api.scrapfly.io/scrape?key=..&url=..&unblocker=true&country=nz&session=..&proxified_response=true
     A POST to the same address forwards its body (and headers[content-type]) to the retailer.
-    The body and status are the retailer's own; failures carry X-Scrapfly-Reject-Code. The cost in
-    credits is in X-Scrapfly-Api-Cost. A session keeps cookies and the exit IP for 7 days, so the
-    anti-bot clearance is earned once and reused; one session can't be used concurrently.
+    The body and status are the retailer's own; failures carry X-Scrapfly-Reject-Code. The credits
+    billed are in X-Scrapfly-Api-Cost, failures included. Billing (scrape-api/billing, /errors): failed
+    scrapes are normally free, but an upstream 4xx/5xx (ERR::SCRAPE::BAD_UPSTREAM_RESPONSE; 404, 405,
+    422 and 424 aren't covered by the protection) is billed, and once 30% of 1,000+ scrapes in 24 h are
+    blocked without the Unblocker, every failure is billed. So the header is trusted on every response.
+    A session keeps cookies and the exit IP for 7 days, so the anti-bot clearance is earned once and
+    reused; one session can't be used concurrently.
 Zyte API (https://docs.zyte.com/zyte-api/usage/http.html)
     POST api.zyte.com/v1/extract {"url", "httpResponseBody": true}, API key as the basic-auth user.
-    The retailer's status is in `statusCode`; 520/521 mean Zyte was banned. Only successful
-    responses are billed, but no cost comes back, so it's estimated from `usd_per_request`.
+    The retailer's status is in `statusCode`; 520/521 mean Zyte was banned. Billing (zyte-api/pricing,
+    usage/errors): every HTTP 200 from Zyte is a billed "successful response", even when the site
+    answered 403, 404 or a waiting room; 520/521, 429/503 and other Zyte errors are free. No cost comes
+    back, so it's estimated from `usd_per_request`.
     A POST sets "httpRequestMethod": "POST" and the body as "httpRequestText".
 """
 
@@ -113,11 +120,17 @@ class ScrapFlyBackend:
                                                    data=body, headers={"Content-Type": content_type})
             except RequestsError as exc:
                 raise FetchError(f"scrapfly: {exc}") from exc
+        # "API cost billed": set on failures too when ScrapFly bills them (an upstream 4xx/5xx, or every
+        # failure once its 30% rule has switched failed-scrape protection off), 0 when they're free.
         cost = float(resp.headers.get("x-scrapfly-api-cost") or 0) * self.usd_per_credit
         reject = resp.headers.get("x-scrapfly-reject-code")
-        if reject:
-            raise self._reject_error(resp.status_code, reject)
-        return _check_target(url, resp.status_code, resp.text, "GET" if body is None else "POST", detect_queue), cost
+        try:
+            if reject:
+                raise self._reject_error(resp.status_code, reject)
+            return _check_target(url, resp.status_code, resp.text, "GET" if body is None else "POST", detect_queue), cost
+        except FetchError as exc:
+            exc.cost_usd = cost
+            raise
 
     @staticmethod
     def _reject_error(status: int, code: str) -> FetchError:
@@ -127,7 +140,7 @@ class ScrapFlyBackend:
         if status == 429:
             return ProviderError(message, cooldown=600)  # quota, concurrency or throttler limit
         if status == 422:
-            return Blocked(message)  # the scrape itself failed (anti-bot, proxy); not billed
+            return Blocked(message)  # the scrape itself failed (anti-bot, proxy); billed only if the header says so
         return FetchError(message)
 
     async def close(self) -> None:
@@ -185,10 +198,15 @@ class ZyteBackend:
             if status in (429, 503):
                 raise ProviderError(message, cooldown=600)
             raise FetchError(message)
+        # A 200 from Zyte is billed whatever the site answered (its 403, 404 or waiting room included).
         data = resp.json()
         text = base64.b64decode(data.get("httpResponseBody") or "").decode("utf-8", errors="replace")
         method = "GET" if body is None else "POST"
-        return _check_target(url, int(data.get("statusCode") or 200), text, method, detect_queue), self.usd_per_request
+        try:
+            return _check_target(url, int(data.get("statusCode") or 200), text, method, detect_queue), self.usd_per_request
+        except FetchError as exc:
+            exc.cost_usd = self.usd_per_request
+            raise
 
     async def close(self) -> None:
         if self._session is not None:

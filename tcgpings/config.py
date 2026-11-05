@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     # the monthly usage limit set in Zyte's dashboard.
     scrapfly_monthly_credits: int = 200_000
     zyte_monthly_budget_usd: float = 30.0
-    # All paid routes stop at this total; past 80% Farmers checks fewer regions. 200k credits (US$30) + US$30.
-    unblocker_monthly_budget_usd: float = 60.0
+    # All paid routes stop at this monthly total (US$), across every retailer; past 80% Farmers checks fewer
+    # regions. Each route also stops at its own cap above, and each retailer at its own config
+    # "unblocker_monthly_usd" limit (/retailer set unblocker_limit_usd:), so one store can't eat it all.
+    unblocker_monthly_budget_usd: float = 100.0
     unblocker_low_budget_ratio: float = 0.8
     # How long a route rests after the site blocks it, before it's tried again on its own.
     browser_block_cooldown: int = 24 * 3600

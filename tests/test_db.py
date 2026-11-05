@@ -8,6 +8,8 @@ from tcgpings.db import queries
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
 from tcgpings.models import Level, Product, Stock, Store
+from tcgpings.net.chain import spend_limits
+from tcgpings.net.http import NetPolicy
 
 RETAILER = {"id": "farmers", "name": "Farmers", "color": None}
 
@@ -149,12 +151,41 @@ async def test_fetch_breakers_and_spend(pool):
     await queries.breaker_failure(pool, "farmers", "scrapfly", "timeout", 3, 1800)
     [_, scrapfly] = await queries.list_breakers(pool)
     assert scrapfly["is_open"] and 1700 < scrapfly["open_seconds"] <= 1800
-    await queries.add_spend(pool, "scrapfly", 0.0045)
-    await queries.add_spend(pool, "scrapfly", 0.0045)
-    await queries.add_spend(pool, "zyte", 0.00127)
-    assert await queries.month_spend(pool) == pytest.approx(0.01027)
-    assert [(r["backend"], r["requests"]) for r in await queries.month_spend_by_backend(pool)] == [
-        ("scrapfly", 2), ("zyte", 1)]
+    await queries.add_spend(pool, "farmers", "scrapfly", 0.0045)
+    await queries.add_spend(pool, "farmers", "scrapfly", 0.0045, failed=True)
+    await queries.add_spend(pool, "farmers", "zyte", 0.00127)
+    await queries.add_spend(pool, "pokemoncenter-nz", "scrapfly", 0.003)
+    assert await queries.month_spend(pool) == pytest.approx(0.01327)
+    assert await queries.month_spend(pool, backend="scrapfly") == pytest.approx(0.012)
+    assert await queries.month_spend(pool, retailer_id="farmers") == pytest.approx(0.01027)
+    assert await queries.month_spend(pool, backend="scrapfly", retailer_id="pokemoncenter-nz") == pytest.approx(0.003)
+    assert [(r["retailer_id"], r["backend"], r["requests"], r["failed"])
+            for r in await queries.month_spend_rows(pool)] == [
+        ("farmers", "scrapfly", 2, 1), ("farmers", "zyte", 1, 0), ("pokemoncenter-nz", "scrapfly", 1, 0)]
+
+
+async def test_a_stores_spend_limit_lives_in_its_config(pool):
+    await seed(pool)
+    assert await queries.set_retailer_config(pool, "farmers", "unblocker_monthly_usd", 40.0)
+    row = await queries.get_retailer(pool, "farmers")
+    assert row["config"] == {"domain": "x", "unblocker_monthly_usd": 40.0}
+    assert NetPolicy.from_row(row).spend_limit_usd == 40.0
+    await seed(pool)  # startup re-seeding keeps it
+    assert spend_limits(await queries.list_retailers(pool)) == {"farmers": 40.0}
+    assert await queries.set_retailer_config(pool, "farmers", "unblocker_monthly_usd", None)
+    row = await queries.get_retailer(pool, "farmers")
+    assert row["config"] == {"domain": "x"} and NetPolicy.from_row(row).spend_limit_usd == 0
+    assert not await queries.set_retailer_config(pool, "nobody", "unblocker_monthly_usd", 5.0)
+
+
+async def test_spend_from_before_per_store_tracking_still_counts(pool):
+    await pool.execute(
+        "INSERT INTO unblocker_spend (month, backend, requests, cost_usd)"
+        " VALUES (date_trunc('month', now() AT TIME ZONE 'UTC')::date, 'scrapfly', 10, 1.5)"
+    )
+    await queries.add_spend(pool, "farmers", "scrapfly", 0.5)
+    assert await queries.month_spend(pool) == pytest.approx(2.0)
+    assert [r["retailer_id"] for r in await queries.month_spend_rows(pool)] == ["", "farmers"]
 
 
 async def test_concurrent_observers_produce_one_alert(pool):

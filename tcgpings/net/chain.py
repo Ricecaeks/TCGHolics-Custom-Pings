@@ -11,8 +11,11 @@ nodes share it and it survives restarts:
 - Network errors: 3 in a row rest the route for 30 minutes.
 - The retailer answering with an error (e.g. 404) is a real answer: it's raised, not retried.
 
-Paid routes count their spend per calendar month. Past `budget_usd` they're skipped until the
-next month, and so is each route past its own `backend_budgets` cap (e.g. the ScrapFly plan's credits); past `low_ratio` of it, `budget_low()` lets adapters cut back (Farmers checks fewer regions).
+Paid routes count their spend per calendar month, per retailer and route, including failed requests
+the provider still billed. Past `budget_usd` they're skipped until the next month, and so is each route
+past its own `backend_budgets` cap (e.g. the ScrapFly plan's credits), and each retailer past its own
+limit (`NetPolicy.spend_limit_usd`, config "unblocker_monthly_usd") so one store can't eat the whole
+budget. Past `low_ratio` of it, `budget_low()` lets adapters cut back (Farmers checks fewer regions).
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from tcgpings.db import queries
-from tcgpings.net.http import Blocked, FetchError, NetPolicy
+from tcgpings.net.http import SPEND_LIMIT_KEY, Blocked, FetchError, NetPolicy
 from tcgpings.net.ratelimit import RateLimiter
 from tcgpings.net.unblock import ProviderError
 
@@ -65,9 +68,10 @@ class ChainStore(Protocol):
     async def trip(self, retailer_id: str, backend: str, seconds: float, error: str) -> None: ...
     async def failure(self, retailer_id: str, backend: str, error: str) -> None: ...
     async def ok(self, retailer_id: str, backend: str) -> None: ...
-    async def spend(self, backend: str, usd: float) -> None: ...
+    async def spend(self, retailer_id: str, backend: str, usd: float, failed: bool = False) -> None: ...
     async def month_spend(self) -> float: ...
     async def backend_spend(self, backend: str) -> float: ...
+    async def retailer_spend(self, retailer_id: str) -> float: ...
 
 
 class DbChainStore:
@@ -86,14 +90,17 @@ class DbChainStore:
     async def ok(self, retailer_id: str, backend: str) -> None:
         await queries.breaker_ok(self.pool, retailer_id, backend)
 
-    async def spend(self, backend: str, usd: float) -> None:
-        await queries.add_spend(self.pool, backend, usd)
+    async def spend(self, retailer_id: str, backend: str, usd: float, failed: bool = False) -> None:
+        await queries.add_spend(self.pool, retailer_id, backend, usd, failed)
 
     async def month_spend(self) -> float:
         return await queries.month_spend(self.pool)
 
     async def backend_spend(self, backend: str) -> float:
-        return await queries.month_spend(self.pool, backend)
+        return await queries.month_spend(self.pool, backend=backend)
+
+    async def retailer_spend(self, retailer_id: str) -> float:
+        return await queries.month_spend(self.pool, retailer_id=retailer_id)
 
 
 class MemoryChainStore:
@@ -102,7 +109,8 @@ class MemoryChainStore:
     def __init__(self) -> None:
         self.open_until: dict[tuple[str, str], float] = {}
         self.failures: dict[tuple[str, str], int] = {}
-        self.spent: dict[str, float] = {}
+        self.spent: dict[tuple[str, str], float] = {}  # (retailer, backend) -> USD
+        self.failed: dict[tuple[str, str], int] = {}  # billed failures
 
     async def is_open(self, retailer_id: str, backend: str) -> bool:
         return self.open_until.get((retailer_id, backend), 0) > time.time()
@@ -121,14 +129,26 @@ class MemoryChainStore:
         self.open_until.pop((retailer_id, backend), None)
         self.failures.pop((retailer_id, backend), None)
 
-    async def spend(self, backend: str, usd: float) -> None:
-        self.spent[backend] = self.spent.get(backend, 0.0) + usd
+    async def spend(self, retailer_id: str, backend: str, usd: float, failed: bool = False) -> None:
+        key = (retailer_id, backend)
+        self.spent[key] = self.spent.get(key, 0.0) + usd
+        if failed:
+            self.failed[key] = self.failed.get(key, 0) + 1
 
     async def month_spend(self) -> float:
         return sum(self.spent.values())
 
     async def backend_spend(self, backend: str) -> float:
-        return self.spent.get(backend, 0.0)
+        return sum(usd for (_, b), usd in self.spent.items() if b == backend)
+
+    async def retailer_spend(self, retailer_id: str) -> float:
+        return sum(usd for (r, _), usd in self.spent.items() if r == retailer_id)
+
+
+def spend_limits(retailers: Any) -> dict[str, float]:
+    """Retailer id -> its own monthly unblocker limit in USD, for the retailer rows that have one."""
+    limits = {r["id"]: float((r["config"] or {}).get(SPEND_LIMIT_KEY) or 0) for r in retailers}
+    return {rid: limit for rid, limit in limits.items() if limit > 0}
 
 
 @dataclass
@@ -160,14 +180,35 @@ class FetchChain:
         """The routes in `order` this node can actually use (an unblocker needs its API key set)."""
         return [name for name in order if name in self.backends]
 
-    async def budget_used(self) -> float:
-        """Fraction of this month's unblocker budget spent (0 when no budget is set)."""
+    def cap_usd(self) -> float:
+        """The most the paid routes can spend this month, 0 when there's no cap.
+
+        That's `budget_usd`, or less when every paid route has its own smaller cap (a US$30 ScrapFly plan
+        plus a US$30 Zyte limit stop at US$60 whatever the total says), so "budget low" and "used up"
+        still fire before the routes run dry.
+        """
         if self.budget_usd <= 0:
             return 0.0
-        return await self.store.month_spend() / self.budget_usd
+        caps = [self.backend_budgets.get(name) or 0 for name, b in self.backends.items() if b.paid]
+        if caps and all(caps):
+            return min(self.budget_usd, sum(caps))
+        return self.budget_usd
 
-    async def budget_low(self) -> bool:
-        return await self.budget_used() >= self.low_ratio
+    async def budget_used(self) -> float:
+        """Fraction of this month's unblocker budget spent (0 when no budget is set)."""
+        cap = self.cap_usd()
+        if cap <= 0:
+            return 0.0
+        return await self.store.month_spend() / cap
+
+    async def budget_low(self, policy: NetPolicy | None = None) -> bool:
+        """Past `low_ratio` of the month's budget, or of `policy`'s retailer's own limit."""
+        if await self.budget_used() >= self.low_ratio:
+            return True
+        if policy is not None and policy.spend_limit_usd > 0:
+            spent = await self.store.retailer_spend(policy.retailer_id)
+            return spent >= self.low_ratio * policy.spend_limit_usd
+        return False
 
     async def fetch_text(
         self, policy: NetPolicy, origin: str, url: str, headers: dict | None = None, order: list[str] | None = None,
@@ -199,6 +240,10 @@ class FetchChain:
             if backend.paid and cap and await self.store.backend_spend(name) >= cap:
                 skipped.append(f"{name} over its own monthly budget")
                 continue
+            limit = policy.spend_limit_usd
+            if backend.paid and limit > 0 and await self.store.retailer_spend(rid) >= limit:
+                skipped.append(f"{name} paused: {rid} over its own monthly limit")
+                continue
             if backend.paid:
                 await self.limiter.acquire(rid, name, policy.requests_per_minute)
             options = {}
@@ -209,18 +254,20 @@ class FetchChain:
                     text, cost = await backend.fetch(policy, origin, url, headers, **options)
                 else:
                     text, cost = await backend.fetch(policy, origin, url, headers, body=body, **options)
-            except Blocked as exc:
-                rest = self.cooldowns.unblocker_blocked if backend.paid else self.cooldowns.browser_blocked
-                log.warning("%s: %s blocked, resting it %d min: %s", rid, name, rest // 60, exc)
-                await self.store.trip(rid, name, rest, str(exc)[:500])
-                skipped.append(f"{name} blocked")
-                continue
-            except ProviderError as exc:
-                log.warning("%s: %s unavailable, resting it %d min: %s", rid, name, exc.cooldown // 60, exc)
-                await self.store.trip(rid, name, exc.cooldown, str(exc)[:500])
-                skipped.append(f"{name} unavailable")
-                continue
             except FetchError as exc:
+                if getattr(exc, "cost_usd", 0.0):  # the provider billed it even though it didn't get the page
+                    await self.store.spend(rid, name, exc.cost_usd, failed=True)
+                if isinstance(exc, Blocked):
+                    rest = self.cooldowns.unblocker_blocked if backend.paid else self.cooldowns.browser_blocked
+                    log.warning("%s: %s blocked, resting it %d min: %s", rid, name, rest // 60, exc)
+                    await self.store.trip(rid, name, rest, str(exc)[:500])
+                    skipped.append(f"{name} blocked")
+                    continue
+                if isinstance(exc, ProviderError):
+                    log.warning("%s: %s unavailable, resting it %d min: %s", rid, name, exc.cooldown // 60, exc)
+                    await self.store.trip(rid, name, exc.cooldown, str(exc)[:500])
+                    skipped.append(f"{name} unavailable")
+                    continue
                 if exc.status is not None:  # the retailer answered (404...): that's the result
                     await self.store.ok(rid, name)
                     raise
@@ -230,7 +277,7 @@ class FetchChain:
                 continue
             await self.store.ok(rid, name)
             if cost:
-                await self.store.spend(name, cost)
+                await self.store.spend(rid, name, cost)
             if name != routes[0]:
                 log.info("%s: served by %s (%s)", rid, name, ", ".join(skipped))
             return text
