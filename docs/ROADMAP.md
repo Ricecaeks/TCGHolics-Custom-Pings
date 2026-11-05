@@ -1,6 +1,6 @@
 # Roadmap
 
-What's built, what's next, and what's parked. Reviewed 2026-11-05. Each numbered item ships as its own PR.
+What's built, what's next, and what's parked. Reviewed 2026-11-06. Each numbered item ships as its own PR.
 
 ## Built
 
@@ -17,15 +17,9 @@ What's built, what's next, and what's parked. Reviewed 2026-11-05. Each numbered
 | Pokémon Center NZ / AU / UK (Zyte), with queue alerts | live |
 | P-Bandai NZ (its search API) | live |
 | Member `/ping` keywords, `/spotted` reports, hot sets with news-fed approval cards | live |
-
-## Wave 1: reliability
-
-1. **Price-flap damping.** Skip a price-change alert when the new price is one the product had in the last 24 h. On 2026-11-04, 314 of 602 alerts were 4 products bouncing between two prices.
-2. **Silent-break alarms.** Warn the log channel when a scan finds 0 products, under half the usual count, or nothing succeeds for 3× the check interval. Today a 0-product scan counts as success.
-3. **Send queue hardening.** One malformed alert can't block the queue (it counts attempts and dead-letters after 8). A retry doesn't resend ping messages that already went out.
-4. **Pause dead checks.** Pause a product check after 20 failures in a row with 403 or 404, report it once, and list paused checks in `/status`.
-5. **Spend per store.** Record paid unblocker spend per retailer, including billed failures. The monthly cap rises to $100.
-6. **Keep logs, real heartbeat.** Keep rotating log files on disk. The heartbeat checks that jobs and alerts ran recently, not just that the container is up.
+| Hosting: the NUC runs everything (nothing on GGPC). A fleet of containers: `control` (leader, Discord, alerts), `worker-http` (32 quick jobs at once), `worker-browser` (4 Chrome / paid jobs), Postgres | live |
+| Fair scheduling: worker lanes, at most 3 running jobs per store, one keyword-search job per shop, queue-lag alarm | live |
+| Wave 1 reliability: price-flap damping, silent-break alarms, send-queue hardening, paused dead checks, spend per store ($100 total: ScrapFly $30 + Zyte $70), logs on disk, real heartbeat | done |
 
 ## Wave 2: Zephyr cutover
 
