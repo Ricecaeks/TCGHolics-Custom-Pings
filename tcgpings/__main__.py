@@ -9,7 +9,6 @@ import logging
 import sys
 import time
 from dataclasses import asdict
-from pathlib import Path
 
 from tcgpings.config import Settings
 
@@ -20,7 +19,8 @@ def _setup_logging(settings: Settings, to_file: bool = False) -> None:
         from tcgpings.logfile import file_handler
 
         try:
-            handlers.append(file_handler(settings.log_dir, settings.log_file_max_mb, settings.log_file_keep))
+            handlers.append(file_handler(settings.log_dir, settings.log_file_max_mb, settings.log_file_keep,
+                                         settings.node_name))
         except OSError as e:  # never stop the bot over its log file
             print(f"log file disabled: {e}", file=sys.stderr)
     logging.basicConfig(
@@ -128,7 +128,7 @@ async def _admin(args: argparse.Namespace, settings: Settings) -> None:
 
 
 def _health(settings: Settings) -> int:
-    path = Path(settings.data_dir) / "heartbeat"
+    path = settings.health_file
     try:
         age = time.time() - float(path.read_text())
     except (OSError, ValueError):

@@ -72,11 +72,18 @@ class Worker:
 
     async def run(self) -> None:
         s = self.ctx.settings
+        lanes = s.lanes
+        if not lanes:
+            log.info("WORKER_LANES is empty: this node claims no jobs")
+            await self._stopping.wait()
+            return
         while not self._stopping.is_set():
             free = s.worker_concurrency - len(self._running)
             if free > 0:
                 try:
-                    jobs = await queries.claim_jobs(self.ctx.pool, self.ctx.node_name, free, s.lease_seconds)
+                    jobs = await queries.claim_jobs(
+                        self.ctx.pool, self.ctx.node_name, free, s.lease_seconds, lanes, s.max_inflight_per_retailer,
+                    )
                 except Exception:
                     log.exception("claiming jobs failed")
                     jobs = []

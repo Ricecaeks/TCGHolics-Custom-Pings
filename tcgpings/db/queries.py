@@ -6,6 +6,7 @@ from typing import Any
 
 import asyncpg
 
+from tcgpings.cluster import lanes
 from tcgpings.models import Product, Stock, Store
 
 DB = asyncpg.Pool | asyncpg.Connection
@@ -144,15 +145,47 @@ async def remove_watch(db: DB, watch_id: int) -> bool:
 # --- jobs ------------------------------------------------------------------------------
 
 
-async def claim_jobs(db: DB, node: str, limit: int, lease_seconds: int) -> list[asyncpg.Record]:
+# A retailer's lane in SQL, matching tcgpings.cluster.lanes.retailer_lane: $known are the valid lane names,
+# $browser the browser-lane adapters (both passed as arrays).
+def _lane_sql(known: str, browser: str) -> str:
+    return (f"CASE WHEN r.config->>'lane' = ANY({known}::text[]) THEN r.config->>'lane' "
+            f"WHEN r.adapter = ANY({browser}::text[]) THEN '{lanes.BROWSER}' ELSE '{lanes.HTTP}' END")
+
+
+async def claim_jobs(
+    db: DB, node: str, limit: int, lease_seconds: int,
+    worker_lanes: list[str] | None = None, max_per_retailer: int | None = None,
+) -> list[asyncpg.Record]:
+    """Lease up to `limit` due jobs, most overdue first.
+
+    `worker_lanes` limits them to retailers in those lanes (None: every lane; []: nothing). With
+    `max_per_retailer`, a retailer never gets more than that many leased jobs across the cluster: those
+    already running count, and so do the ones this claim takes. Two nodes claiming at the same moment can
+    go slightly over; the next claim catches up.
+    """
+    if worker_lanes is not None and not worker_lanes:
+        return []
+    cap = max_per_retailer if max_per_retailer and max_per_retailer > 0 else None
     return await db.fetch(
-        """
-        WITH due AS (
-            SELECT j.id FROM jobs j JOIN retailers r ON r.id = j.retailer_id
+        f"""
+        WITH busy AS (
+            SELECT retailer_id, count(*) AS n FROM jobs
+            WHERE lease_until > now() GROUP BY retailer_id
+        ), candidates AS (
+            SELECT j.id, j.next_run_at,
+                   coalesce(b.n, 0) + row_number() OVER (PARTITION BY j.retailer_id ORDER BY j.next_run_at) AS slot
+            FROM jobs j
+            JOIN retailers r ON r.id = j.retailer_id
+            LEFT JOIN busy b ON b.retailer_id = j.retailer_id
             WHERE j.enabled AND r.enabled
               AND j.next_run_at <= now()
               AND (j.lease_until IS NULL OR j.lease_until < now())
-            ORDER BY j.next_run_at
+              AND ($4::text[] IS NULL OR {_lane_sql("$6", "$7")} = ANY($4::text[]))
+        ), due AS (
+            SELECT j.id FROM jobs j JOIN candidates c ON c.id = j.id
+            WHERE ($5::int IS NULL OR c.slot <= $5)
+              AND (j.lease_until IS NULL OR j.lease_until < now())
+            ORDER BY c.next_run_at
             LIMIT $2
             FOR UPDATE OF j SKIP LOCKED
         )
@@ -160,7 +193,7 @@ async def claim_jobs(db: DB, node: str, limit: int, lease_seconds: int) -> list[
         FROM due WHERE j.id = due.id
         RETURNING j.*
         """,
-        node, limit, float(lease_seconds),
+        node, limit, float(lease_seconds), worker_lanes, cap, list(lanes.LANES), sorted(lanes.BROWSER_ADAPTERS),
     )
 
 
@@ -327,6 +360,25 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
                                   AND lease_owner IS NULL) AS overdue
         FROM jobs WHERE enabled GROUP BY retailer_id ORDER BY retailer_id
         """
+    )
+
+
+QUEUE_LAG_SECONDS = 120  # a job this far past its run time counts as overdue
+
+
+async def queue_lag(db: DB) -> asyncpg.Record:
+    """How far behind the job queue is: due jobs waiting for a worker (enabled and unpaused, at enabled
+    retailers, not running) more than QUEUE_LAG_SECONDS past their time, and the longest wait in seconds."""
+    return await db.fetchrow(
+        """
+        SELECT count(*) FILTER (WHERE j.next_run_at < now() - make_interval(secs => $1)) AS overdue,
+               coalesce(extract(epoch FROM now() - min(j.next_run_at)), 0)::float8 AS worst_seconds
+        FROM jobs j JOIN retailers r ON r.id = j.retailer_id
+        WHERE j.enabled AND r.enabled AND j.paused_at IS NULL
+          AND j.next_run_at <= now()
+          AND (j.lease_until IS NULL OR j.lease_until < now())
+        """,
+        float(QUEUE_LAG_SECONDS),
     )
 
 
@@ -734,18 +786,18 @@ async def outbox_backlog(db: DB) -> asyncpg.Record:
 
 async def heartbeat(
     db: DB, name: str, version: str, egress_ip: str | None, is_leader: bool,
-    jobs_ok: int, jobs_failed: int, alerts_sent: int,
+    jobs_ok: int, jobs_failed: int, alerts_sent: int, lanes: list[str] | None = None,
 ) -> None:
     await db.execute(
         """
-        INSERT INTO nodes (name, version, egress_ip, is_leader, jobs_ok, jobs_failed, alerts_sent)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO nodes (name, version, egress_ip, is_leader, jobs_ok, jobs_failed, alerts_sent, lanes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (name) DO UPDATE SET
             version = EXCLUDED.version, egress_ip = EXCLUDED.egress_ip, is_leader = EXCLUDED.is_leader,
             last_heartbeat = now(), jobs_ok = EXCLUDED.jobs_ok, jobs_failed = EXCLUDED.jobs_failed,
-            alerts_sent = EXCLUDED.alerts_sent
+            alerts_sent = EXCLUDED.alerts_sent, lanes = EXCLUDED.lanes
         """,
-        name, version, egress_ip, is_leader, jobs_ok, jobs_failed, alerts_sent,
+        name, version, egress_ip, is_leader, jobs_ok, jobs_failed, alerts_sent, lanes,
     )
 
 

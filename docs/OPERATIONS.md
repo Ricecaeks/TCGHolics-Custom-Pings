@@ -3,31 +3,39 @@
 ## Health
 
 - **`/status` in Discord:**
-  - every node, with a 👑 next to the leader, when it last checked in, and its job and alert counts
+  - every node, with a 👑 next to the leader, when it last checked in, its job and alert counts, and its lanes
+  - the job queue: how many due jobs are over 2 minutes late and how long the oldest has waited (🟡 any late, 🔴 oldest over 10 minutes)
   - each retailer: 🟢 healthy, 🟡 some jobs failing or overdue, 🔴 every job failing
   - paused product checks (see "Rate limits and blocks")
   - the alert queue, database size and proxy health
-- **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, or the database passes 400 MB. It posts ✅ when the problem clears.
+- **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, the job queue's oldest due job has waited over 10 minutes, or the database passes 400 MB. It posts ✅ when the problem clears.
 - **On a node:** see [Logs](#logs).
 - **From any machine with `.env`:** `python -m tcgpings admin show` dumps retailers, watches, routes, nodes and job health.
-- **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, and that no alert has sat unsent for over 15 minutes. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
+- **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, that no alert has sat unsent for over 15 minutes, and that no due job (enabled, not paused) has waited over 20 minutes for a worker. Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
 
 ## Logs
 
-The bot writes its log to `data/logs/bot.log`, inside the mounted data folder, so it survives restarts and redeploys. On the NUC that's `/opt/tcgpings/data/logs/bot.log` (`TCGPINGS_HOME`).
+Each node writes its own log to `data/logs/bot-<NODE_NAME>.log`, inside the mounted data folder, so it survives restarts and redeploys. The containers share that folder, so each has its own file and never rotates another's. On the NUC (`TCGPINGS_HOME` is `/opt/tcgpings`):
 
-- A new file starts each day (UTC midnight) or when the file reaches 25 MB. The 7 newest old files are kept as `bot.log.1` (newest) to `bot.log.7`. That's about a week of history, and never more than 200 MB.
+| Container | Node | Log file |
+|---|---|---|
+| `tcgpings-control-1` | `nuc-control` (leader, Discord bot) | `/opt/tcgpings/data/logs/bot-nuc-control.log` |
+| `tcgpings-worker-http-1` | `nuc-http` (plain-HTTP stores) | `/opt/tcgpings/data/logs/bot-nuc-http.log` |
+| `tcgpings-worker-browser-1` | `nuc-browser` (Chrome and unblocker stores) | `/opt/tcgpings/data/logs/bot-nuc-browser.log` |
+
+- A new file starts each day (UTC midnight) or when the file reaches 25 MB. The 7 newest old files are kept as `bot-<node>.log.1` (newest) to `bot-<node>.log.7`. That's about a week of history, and never more than 200 MB per node.
 - Change it with `LOG_FILE_MAX_MB` and `LOG_FILE_KEEP` in `.env`. Set `LOG_DIR=` (empty) to turn the file off.
 - Only the bot (`run`) writes the file; `probe`, `admin` and health checks print to the console only.
 
 Reading them on the NUC (`ssh nuc`):
 
 ```bash
-tail -n 200 -F /opt/tcgpings/data/logs/bot.log        # follow live
-grep ERROR /opt/tcgpings/data/logs/bot.log*            # search every day kept
+tail -n 200 -F /opt/tcgpings/data/logs/bot-nuc-http.log   # follow one node live
+tail -n 50 -F /opt/tcgpings/data/logs/bot-*.log            # every node at once
+grep ERROR /opt/tcgpings/data/logs/bot-*.log*              # search every node and day kept
 ```
 
-`docker logs tcgpings-node-1 --tail 200 -f` also works, but it only goes back to the last deploy, because every deploy replaces the container.
+`docker logs tcgpings-worker-http-1 --tail 200 -f` (or `tcgpings-control-1`, `tcgpings-worker-browser-1`) also works, but it only goes back to the last deploy, because every deploy replaces the containers.
 
 Database shell on the NUC: `docker exec -it tcgpings-db-1 psql -U tcgpings -d tcgpings`.
 
@@ -39,7 +47,7 @@ Merge to `main`. CI runs the tests, then `deploy.yml` rebuilds and restarts the 
 
 The leader writes `data/backups/tcgpings-<timestamp>.dump` once a day and keeps the newest 7. On the NUC that's `/opt/tcgpings/data/backups/`. Copy them somewhere off-site if you can.
 
-To restore into the NUC's database (stop the bot first: `docker stop tcgpings-node-1`):
+To restore into the NUC's database (stop the bot first: `docker stop tcgpings-control-1 tcgpings-worker-http-1 tcgpings-worker-browser-1`):
 
 ```bash
 docker exec -i tcgpings-db-1 pg_restore --clean --if-exists --no-owner -U tcgpings -d tcgpings < /opt/tcgpings/data/backups/tcgpings-YYYYMMDD-HHMMSS.dump
@@ -53,13 +61,29 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 
 ## Rate limits and blocks
 
-- Each retailer has a cluster-wide **requests per minute** budget (default 30), changed with `/retailer set requests_per_minute:`. Nodes behind the same public IP share the budget. Each additional IP or proxy adds capacity.
+- Each retailer has a cluster-wide **requests per minute** budget (default 30), changed with `/retailer set requests_per_minute:`. Nodes behind the same public IP that serve the retailer's lane share the budget; nodes in other lanes don't take a share. Each additional IP or proxy adds capacity.
 - Paid unblocker spend (ScrapFly, Zyte) is capped at US$100 a month across all retailers. A retailer can also get its own monthly limit with `/retailer set unblocker_limit_usd:` (0 removes it); `/status` shows each one's spend. See HOSTING.md §6.
 - A 403, a 429 or a captcha page counts as **blocked**. The job backs off exponentially, up to 30 minutes.
 - **Dead product checks pause themselves.** After 20 failures in a row that are all HTTP 403 or 404, a product check is paused. Timeouts and 5xx errors never pause a check. A paused check is retried once a day and resumes on its own as soon as a retry works. Each new pause is posted once to the staff log channel, and `/status` lists every paused check with its retailer, product, reason and pause time. Discovery and search jobs are never paused.
   - If a retailer stays 🔴, first try lowering its rate.
   - Next, try `proxy_policy:pool`.
   - If neither helps, the site probably changed. Run `python -m tcgpings probe <adapter> search <query>` to see the raw failure.
+
+## Containers, lanes and the job queue
+
+Each retailer's jobs run in one **lane**: `browser` for the stores that use Chrome or the paid unblockers (Farmers, Kmart, Mighty Ape, Pokémon Center, The Warehouse), `http` for the rest. A node only claims jobs in its own lanes, so slow Chrome jobs can't keep the quick stores waiting. To move one store to the other lane, use `/retailer set retailer:<id> lane:http` (or `lane:browser`); `lane:default` goes back to its adapter's lane. This sets the `lane` key of the retailer's config. The lanes are listed in `tcgpings/cluster/lanes.py`.
+
+Settings per container (set in `deploy/docker-compose.nuc.yml`, which overrides `.env`):
+
+| Setting | Default | What it does |
+|---|---|---|
+| `WORKER_LANES` | `http,browser` | Lanes this node claims jobs for. Empty (or `none`): no jobs at all. |
+| `WORKER_CONCURRENCY` | 8 | Jobs this node runs at once (`worker-http` 32, `worker-browser` 4). |
+| `MAX_INFLIGHT_PER_RETAILER` | 3 | Jobs one store may have running at once, across all nodes. Due jobs of a store at its limit wait, and other stores' jobs go first. |
+| `LEADER_ELIGIBLE` | `true` | `false`: this node never becomes leader. On the NUC only `control` may lead. |
+| `DB_POOL_SIZE` | 4 | Database connections per node (`worker-http` 10). |
+
+**Queue lag.** Due jobs are claimed most overdue first. `/status` shows how many are over 2 minutes late and how long the oldest has waited. The leader warns in the staff log when the oldest has waited over 10 minutes, and the heartbeat fails when any has waited over 20. If it keeps happening, check which lane is behind (`/status` per retailer, overdue counts), then raise that worker's `WORKER_CONCURRENCY` or add a copy of it (see the comment at the top of the compose file). On a disabled retailer, or a paused check, nothing counts as late.
 
 ## Tuning check frequency
 
@@ -75,4 +99,4 @@ Repeat alerts for the same product, store and state are suppressed for 15 minute
 
 ## Moving to the cloud
 
-The container is stateless. Run the same image on any VM or container host, using the same `.env` with a different `NODE_NAME`. Cloud nodes and NUCs can run side by side.
+The container is stateless. Run the same image on any VM or container host, using the same `.env` with a different `NODE_NAME`. Cloud nodes and NUCs can run side by side. Pick each node's `WORKER_LANES` and `LEADER_ELIGIBLE` to suit it.

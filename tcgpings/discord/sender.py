@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 
 import aiohttp
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 
 POLL_SECONDS = 2
 BATCH = 10
+LEASE_SECONDS = 120  # a claimed batch is this node's for this long
 MAX_CONTENT = 1900  # Discord's limit is 2000
 
 
@@ -40,8 +42,14 @@ async def sender_loop(ctx: Context) -> None:
 
 
 async def send_batch(ctx: Context, session: aiohttp.ClientSession) -> int:
-    rows = await queries.claim_alerts(ctx.pool, ctx.node_name, BATCH)
-    for row in rows:
+    rows = await queries.claim_alerts(ctx.pool, ctx.node_name, BATCH, LEASE_SECONDS)
+    deadline = time.monotonic() + LEASE_SECONDS * 0.75
+    for i, row in enumerate(rows):
+        if time.monotonic() > deadline:
+            # Discord is slow (rate limits): the rest of this batch's leases are about to run out, and another
+            # node may claim them. Leave them to that claim rather than risk posting an alert twice.
+            log.warning("outbox: %d alerts left for the next claim (batch ran past its lease)", len(rows) - i)
+            break
         try:
             event = Event.from_payload(row["payload"])
 

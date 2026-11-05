@@ -1,5 +1,6 @@
 # Runs on the bot's own machine (the NUC), so a success proves the machine is awake, the bot healthy,
-# and that it's actually working: some job succeeded and no alert sat unsent in the last 15 minutes.
+# and that it's actually working: some job succeeded and no alert sat unsent in the last 15 minutes,
+# and no job has waited over 20 minutes for a worker.
 # A failed run emails the owner; watchdog.yml runs on GitHub's side and raises the alarm in
 # Discord when these successes stop.
 name: heartbeat
@@ -45,3 +46,17 @@ jobs:
           if [ "$job_age" -lt 0 ] || [ "$job_age" -ge 15 ]; then echo "::error::No job has succeeded in the last 15 minutes"; failed=1; fi
           if [ "$stuck" -gt 0 ]; then echo "::error::$stuck alert(s) unsent for over 15 minutes"; failed=1; fi
           exit $failed
+      - name: Check the job queue keeps up
+        run: |
+          # Read-only. Due jobs waiting for a worker (enabled, unpaused, at an enabled retailer, not running):
+          # the oldest must be under 20 minutes late, or the workers aren't keeping up.
+          sql="SELECT count(*) FILTER (WHERE j.next_run_at < now() - make_interval(mins => 20)),
+            coalesce(floor(extract(epoch FROM now() - min(j.next_run_at)) / 60)::int, 0)
+            FROM jobs j JOIN retailers r ON r.id = j.retailer_id
+            WHERE j.enabled AND r.enabled AND j.paused_at IS NULL AND j.next_run_at <= now()
+              AND (j.lease_until IS NULL OR j.lease_until < now())"
+          out=$(docker exec tcgpings-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c "$sql") \
+            || { echo "::error::database query failed"; exit 1; }
+          IFS='|' read -r late worst <<< "$out"
+          echo "jobs over 20 min late: $late; oldest waiting: $worst min"
+          if [ "$late" -gt 0 ]; then echo "::error::$late job(s) over 20 minutes overdue (oldest $worst min)"; exit 1; fi
