@@ -26,6 +26,7 @@ class RetailerAdapter(ABC):
     # Retailers that refresh store stock at a set time each day (NZ time): each product is checked
     # once a day after it, spread over the following hour. Takes the place of store_stock_interval.
     store_stock_daily_at: ClassVar[time | None] = None
+    store_stock_daily_spread: ClassVar[int] = 3600  # seconds after store_stock_daily_at the day's checks spread over
     # Seconds between checks of a product in a hot set, where extra checks are free (None = no change).
     hot_sku_interval: ClassVar[int | None] = None
     # Retailer rows created automatically at startup: (id, name, config, color).

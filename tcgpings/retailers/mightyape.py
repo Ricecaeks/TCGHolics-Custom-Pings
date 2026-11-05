@@ -36,7 +36,7 @@ CATEGORY = BASE + "/mn/shop/category/"
 FETCH_ORDER = ["scrapfly"]
 CATEGORIES = [
     {"path": "hobbies/trading-cards/pokemon", "every": 30 * 60},
-    {"path": "hobbies/trading-cards/", "every": 60 * 60},
+    {"path": "hobbies/trading-cards/", "every": 2 * 60 * 60},  # overlaps the Pokémon page; every read is paid
 ]
 SLACK = 120  # a category due within this many seconds is read now rather than skipped to the next run
 

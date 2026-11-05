@@ -160,7 +160,7 @@ The first scan of a new retailer or watch is a silent baseline, so adding things
 
 For retailers with store stock (JB Hi-Fi and Farmers), products that match **any keyword route** for that retailer get their own per-store checks automatically, up to 150 per retailer. Products stop being tracked when no keyword route matches them any more.
 
-Farmers' site says store stock was "updated at 8am this morning" (fixed text, not proven), so each tracked product is checked **once a day between 8:30 and 9:30am**, together with its price. Those checks go through the fetch chain (our own Chrome, then ScrapFly, then Zyte; see [HOSTING.md §6](HOSTING.md#6-farmers-status-and-next-steps)).
+Farmers' site says store stock was "updated at 8am this morning" (fixed text, not proven), so each tracked product is checked **once a day between 8:30am and 12:30pm**; its price is re-read weekly. Those checks go through the fetch chain (our own Chrome, then ScrapFly, with Zyte only once ScrapFly's monthly budget is used up; see [HOSTING.md §6](HOSTING.md#6-farmers-status-and-next-steps)).
 
 ## Current retailer coverage
 

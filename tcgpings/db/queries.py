@@ -474,6 +474,14 @@ async def get_product(db: DB, retailer_id: str, sku: str) -> asyncpg.Record | No
     )
 
 
+async def online_price(db: DB, retailer_id: str, sku: str) -> int | None:
+    """The last known online price of a product, in cents."""
+    return await db.fetchval(
+        "SELECT price_cents FROM product_state WHERE retailer_id = $1 AND sku = $2 AND store_id = ''",
+        retailer_id, sku,
+    )
+
+
 async def apply_state(
     conn: asyncpg.Connection,
     retailer_id: str,

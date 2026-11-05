@@ -210,6 +210,21 @@ class FetchChain:
             return spent >= self.low_ratio * policy.spend_limit_usd
         return False
 
+    async def within_budget(self, name: str, policy: NetPolicy | None = None) -> bool:
+        """Is paid route `name` set up here and still under the month's total budget, its own cap and
+        (with `policy`) that retailer's own limit? A route that isn't configured or isn't paid is False."""
+        backend = self.backends.get(name)
+        if backend is None or not backend.paid:
+            return False
+        if self.budget_usd > 0 and await self.store.month_spend() >= self.budget_usd:
+            return False
+        cap = self.backend_budgets.get(name)
+        if cap and await self.store.backend_spend(name) >= cap:
+            return False
+        if policy is not None and policy.spend_limit_usd > 0:
+            return await self.store.retailer_spend(policy.retailer_id) < policy.spend_limit_usd
+        return True
+
     async def fetch_text(
         self, policy: NetPolicy, origin: str, url: str, headers: dict | None = None, order: list[str] | None = None,
         body: str | None = None, country: str | None = None, detect_queue: bool = False,

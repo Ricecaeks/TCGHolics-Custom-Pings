@@ -7,8 +7,12 @@ the US store whatever the URL says), so pages come through Zyte with a per-reque
   price, launch_date, availability_status IN_STOCK / OUT_OF_STOCK) and a facet with the whole category's
   in-stock count. The product links (/{locale}/product/{pid}/{slug}) are in the HTML.
 - "tcg-cards" is the sealed range (booster packs, boxes, tins, ETBs, decks), 32 products a page, sortable by
-  newest. Discovery reads page 1 every `every` seconds: new listings and preorders show there. It reads every
-  page when the in-stock count changes (something restocked or sold out) and every `sweep_every` seconds.
+  newest. Discovery reads page 1 (new listings and preorders show there) every `every` seconds while the store
+  is busy, else every `slow_every`. Busy = a product on page 1 launches within LAUNCH_WINDOW of now, or the
+  queue or the in-stock count changed within BUSY_FOR. It reads every page when the in-stock count changes
+  (something restocked or sold out) and every `sweep_every` seconds.
+- Every page is a paid Zyte request, so the read times are kept in data/state/<retailer>.json: a restart or
+  deploy doesn't re-read every store's whole range.
 - Queue: during big drops the store puts shoppers in a waiting room. A waiting-room page in place of the
   category means a queue is on; it's kept as a status row (kind "queue") that alerts when it turns on. The
   bot doesn't try to get through the queue: it reads the store again on its next run.
@@ -25,6 +29,8 @@ import logging
 import math
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 from tcgpings.models import Level, Product, Stock, to_cents
@@ -47,15 +53,23 @@ SCHEMA_AVAILABILITY = {"instock": Level.IN, "outofstock": Level.OUT, "preorder":
                        "limitedavailability": Level.LOW, "soldout": Level.OUT, "discontinued": Level.OUT}
 
 
-def _store(locale: str, geo: str, currency: str, every: int, overseas: bool) -> dict:
-    return {"locale": locale, "geo": geo, "currency": currency, "every": every, "sweep_every": 6 * 3600,
-            "overseas": overseas, "fetch": FETCH_ORDER}
+LAUNCH_WINDOW = 36 * 3600  # a page-1 product launching (or launched) within this of now keeps reads fast
+BUSY_FOR = 3600  # fast reads for this long after the queue or the in-stock count changes
+STATE_DIR: Path | None = Path("data/state")  # where read times survive restarts; None keeps them in memory
 
 
+def _store(locale: str, geo: str, currency: str, every: int, overseas: bool, slow_every: int | None = None,
+           sweep_every: int = 6 * 3600) -> dict:
+    return {"locale": locale, "geo": geo, "currency": currency, "every": every, "slow_every": slow_every or every,
+            "sweep_every": sweep_every, "overseas": overseas, "fetch": FETCH_ORDER}
+
+
+# Every read is a paid request. NZ reads every 3 minutes around launches, drops and queues, else every 15.
+# AU and UK are overseas (members importing), so every 30 minutes with one full sweep a day.
 STORES = [
-    ("pokemoncenter-nz", "Pokémon Center NZ", _store("en-nz", "NZ", "NZD", 180, False)),
-    ("pokemoncenter-au", "Pokémon Center AU", _store("en-au", "AU", "AUD", 600, True)),
-    ("pokemoncenter-uk", "Pokémon Center UK", _store("en-gb", "GB", "GBP", 600, True)),
+    ("pokemoncenter-nz", "Pokémon Center NZ", _store("en-nz", "NZ", "NZD", 180, False, slow_every=900)),
+    ("pokemoncenter-au", "Pokémon Center AU", _store("en-au", "AU", "AUD", 1800, True, sweep_every=24 * 3600)),
+    ("pokemoncenter-uk", "Pokémon Center UK", _store("en-gb", "GB", "GBP", 1800, True, sweep_every=24 * 3600)),
 ]
 
 _NEXT = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
@@ -111,6 +125,18 @@ def parse_category(page: str, retailer_id: str, locale: str, currency: str = "NZ
         ))
     total = int(results.get("total") or len(products))
     return products, total, in_stock_count(results)
+
+
+def launch_times(page: str) -> list[float]:
+    """Launch dates (epoch seconds) of the products on a category page."""
+    docs = ((_results(page) or {}).get("_raw") or {}).get("response", {}).get("docs") or []
+    times = []
+    for doc in docs:
+        try:
+            times.append(datetime.fromisoformat(str(doc["launch_date"]).replace("Z", "+00:00")).timestamp())
+        except (KeyError, TypeError, ValueError):
+            continue
+    return times
 
 
 def _note(status: str, currency: str) -> str | None:
@@ -176,6 +202,7 @@ class PokemonCenterAdapter(RetailerAdapter):
         self.geo = c.get("geo") or "NZ"
         self.currency = c.get("currency") or "NZD"
         self.every = int(c.get("every") or self.default_discover_interval)
+        self.slow_every = max(int(c.get("slow_every") or self.every), self.every)
         self.sweep_every = int(c.get("sweep_every") or 6 * 3600)
         self.category = c.get("category") or CATEGORY
         self.fetch_order = list(c.get("fetch") or FETCH_ORDER)
@@ -183,6 +210,44 @@ class PokemonCenterAdapter(RetailerAdapter):
         self._swept_at = 0.0
         self._in_stock: int | None = None
         self._scanned: int | None = None
+        self._busy_until = 0.0  # fast reads until then (queue or in-stock change)
+        self._launching = False  # page 1 had a product launching around now
+        self._load_state()
+
+    # --- read times, kept on disk so restarts don't re-read (and pay for) everything ---------
+
+    def _state_file(self) -> Path | None:
+        return STATE_DIR / f"{self.retailer_id}.json" if STATE_DIR is not None else None
+
+    def _load_state(self) -> None:
+        path = self._state_file()
+        try:
+            data = json.loads(path.read_text()) if path is not None and path.is_file() else {}
+            self._read_at = float(data.get("read_at") or 0)
+            self._swept_at = float(data.get("swept_at") or 0)
+            self._busy_until = float(data.get("busy_until") or 0)
+            self._launching = bool(data.get("launching"))
+            self._in_stock = data.get("in_stock") if isinstance(data.get("in_stock"), int) else None
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            log.warning("%s: couldn't read saved read times: %s", self.retailer_id, exc)
+
+    def _save_state(self) -> None:
+        path = self._state_file()
+        if path is None:
+            return
+        data = {"read_at": self._read_at, "swept_at": self._swept_at, "busy_until": self._busy_until,
+                "launching": self._launching, "in_stock": self._in_stock}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data))
+            tmp.replace(path)
+        except OSError as exc:
+            log.warning("%s: couldn't save read times: %s", self.retailer_id, exc)
+
+    def read_interval(self, now: float) -> int:
+        """Seconds between page-1 reads: `every` while busy (launch, queue, stock change), else `slow_every`."""
+        return self.every if self._launching or now < self._busy_until else self.slow_every
 
     @property
     def _chain(self):
@@ -215,7 +280,7 @@ class PokemonCenterAdapter(RetailerAdapter):
     async def discover(self) -> list[Product]:
         now = time.time()
         self._scanned = None  # skipped or queued runs don't say anything about the parser
-        if now - self._read_at < self.every - SLACK:
+        if now - self._read_at < self.read_interval(now) - SLACK:
             return []
         self._read_at = now
         url = self.category_url()
@@ -223,10 +288,15 @@ class PokemonCenterAdapter(RetailerAdapter):
             page = await self._get(url)
         except Queued as exc:
             log.info("%s: queue is on (%s)", self.retailer_id, exc)
+            self._busy_until = now + BUSY_FOR
+            self._save_state()
             return [self.queue_status(True)]
         products, total, in_stock = self._parse(page, url)
         scanned = len(products)  # page 1 only, so runs with and without a full sweep compare
         changed = in_stock is not None and self._in_stock is not None and in_stock != self._in_stock
+        self._launching = any(abs(t - now) <= LAUNCH_WINDOW for t in launch_times(page))
+        if changed:
+            self._busy_until = now + BUSY_FOR
         if changed or now - self._swept_at >= self.sweep_every - SLACK:
             pages = min(math.ceil(total / PAGE_SIZE), MAX_PAGES)
             seen = {p.sku for p in products}
@@ -236,6 +306,8 @@ class PokemonCenterAdapter(RetailerAdapter):
                     page = await self._get(url)
                 except Queued:
                     log.info("%s: queue came on mid-sweep", self.retailer_id)
+                    self._busy_until = now + BUSY_FOR
+                    self._save_state()
                     return [self.queue_status(True)]
                 more, _, _ = self._parse(page, url)
                 products += [p for p in more if p.sku not in seen]
@@ -245,6 +317,7 @@ class PokemonCenterAdapter(RetailerAdapter):
                      in_stock, ", count changed" if changed else "")
         self._in_stock = in_stock
         self._scanned = scanned
+        self._save_state()
         return [*products, self.queue_status(False)]
 
     def scan_size(self, results: list[Product]) -> int | None:

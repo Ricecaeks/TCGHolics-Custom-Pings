@@ -69,17 +69,21 @@ def test_store_level(text, level):
 class FakeChain:
     """Stands in for net/chain.py: answers from canned pages, records the URLs and route order."""
 
-    def __init__(self, pages, budget_low=False):
+    def __init__(self, pages, budget_low=False, in_budget=("scrapfly",)):
         self.pages = pages
         self.urls = []
         self.orders = []
         self.low = budget_low
+        self.in_budget = set(in_budget)  # paid routes still under their monthly budgets
 
     def available(self, order):
         return list(order)
 
     async def budget_low(self, policy=None):
         return self.low
+
+    async def within_budget(self, name, policy=None):
+        return name in self.in_budget
 
     async def fetch_text(self, policy, origin, url, headers=None, order=None):
         self.urls.append(url)
@@ -97,8 +101,8 @@ class FakeHttp:
         self.chain = chain
 
 
-def adapter(pages, config=None, budget_low=False):
-    return FarmersAdapter(dict(ROW, config=config or {}), FakeHttp(FakeChain(pages, budget_low)))
+def adapter(pages, config=None, budget_low=False, in_budget=("scrapfly",)):
+    return FarmersAdapter(dict(ROW, config=config or {}), FakeHttp(FakeChain(pages, budget_low, in_budget)))
 
 
 STORE_PAGES = {"State=AUK": load_fixture("farmers", "stores-AUK.html"),
@@ -112,7 +116,7 @@ async def test_store_stock_only_queries_needed_regions():
     assert stock["albany"].level is Level.IN
     regions = sorted(u.split("State=")[1] for u in a.http.chain.urls)
     assert regions == ["AUK", "NTL"]
-    assert a.http.chain.orders[0] == ["browser", "scrapfly", "zyte"]
+    assert a.http.chain.orders[0] == ["browser", "scrapfly"]  # Zyte waits while ScrapFly has credits
 
 
 async def test_low_budget_keeps_only_priority_regions():
@@ -199,3 +203,31 @@ async def test_fetch_products_by_sku_via_constructor():
     [p] = await a.fetch_products(["7044417"])
     assert p.title == "Pokemon Trading Card Mega Zygarde EX Premium Collection Box"
     assert await a.fetch_products(["1234567"]) == []
+
+
+async def test_zyte_only_once_scrapfly_is_out_of_budget():
+    a = adapter(STORE_PAGES, in_budget=())
+    await a.store_stock("7044417", ["albany"])
+    assert a.http.chain.orders == [["browser", "scrapfly", "zyte"]]
+    b = adapter(STORE_PAGES, config={"backup_routes": []})
+    await b.store_stock("7044417", ["albany"])
+    assert b.http.chain.orders == [["browser", "scrapfly", "zyte"]]  # no backups: the whole order
+
+
+async def test_interrupted_store_check_resumes_without_rereading_regions():
+    pages = dict(STORE_PAGES, **{"State=NTL": Blocked("every route resting")})
+    a = adapter(pages)
+    with pytest.raises(Blocked):
+        await a.store_stock("7044417", ["albany", "kaitaia"])
+    assert [u.split("State=")[1] for u in a.http.chain.urls] == ["AUK", "NTL"]
+    a.http.chain.pages["State=NTL"] = STORE_PAGES["State=NTL"]
+    a.http.chain.urls.clear()
+    assert set(await a.store_stock("7044417", ["albany", "kaitaia"])) == {"albany", "kaitaia"}
+    assert [u.split("State=")[1] for u in a.http.chain.urls] == ["NTL"]  # Auckland kept from the first try
+    a.http.chain.urls.clear()
+    await a.store_stock("7044417", ["albany", "kaitaia"])
+    assert len(a.http.chain.urls) == 2  # a finished check reads every region again next time
+
+
+def test_daily_store_check_spreads_over_four_hours():
+    assert FarmersAdapter.store_stock_daily_spread == 4 * 3600
