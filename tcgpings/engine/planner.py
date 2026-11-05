@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Any
 
 from tcgpings.retailers.base import REGISTRY
@@ -10,6 +11,15 @@ from tcgpings.retailers.base import REGISTRY
 
 def sku_job_key(retailer_id: str, sku: str) -> str:
     return f"sku:{retailer_id}:{sku}"
+
+
+def search_job_key(retailer_id: str) -> str:
+    """The one keyword-search job per retailer. Its payload lists every query: see plan_jobs."""
+    return f"search:{retailer_id}"
+
+
+def _earliest(a: datetime | None, b: datetime | None) -> datetime | None:
+    return min(a, b) if a and b else a or b
 
 
 def _merge_stores(a: list[str] | None, b: list[str] | None) -> list[str] | None:
@@ -66,22 +76,32 @@ def plan_jobs(
         for retailer_id in targets:
             if retailer_id not in by_id:
                 continue
-            key = f"search:{retailer_id}:{query}:{w['franchise'] or '*'}"
             cls = REGISTRY[by_id[retailer_id]["adapter"]]
             if not cls.supports_search:
                 continue
+            # One job per retailer runs all its keywords, so pages every search reads (Shopify's
+            # catalogue) are fetched once per run instead of once per keyword.
+            key = search_job_key(retailer_id)
             interval = w["interval_seconds"] or cls.default_search_interval or search_interval
-            existing = jobs.get(key)
-            if existing:
-                existing["payload"]["store_ids"] = _merge_stores(existing["payload"]["store_ids"], w["store_ids"])
-                existing["payload"]["watch_ids"].append(w["id"])
-                existing["interval"] = min(existing["interval"], interval)
+            job = jobs.get(key)
+            if job is None:
+                job = jobs[key] = {"key": key, "kind": "watch_search", "retailer_id": retailer_id,
+                                   "interval": interval, "payload": {"queries": []}}
+            job["interval"] = min(job["interval"], interval)
+            entries = job["payload"]["queries"]
+            entry = next((e for e in entries if (e["query"], e["franchise"]) == (query, w["franchise"])), None)
+            if entry:
+                entry["store_ids"] = _merge_stores(entry["store_ids"], w["store_ids"])
+                entry["watch_ids"].append(w["id"])
+                entry["since"] = _earliest(entry["since"], w.get("created_at"))
             else:
-                jobs[key] = dict(
-                    key=key, kind="watch_search", retailer_id=retailer_id, interval=interval,
-                    payload={
-                        "query": query, "franchise": w["franchise"],
-                        "store_ids": w["store_ids"], "watch_ids": [w["id"]],
-                    },
-                )
+                entries.append({"query": query, "franchise": w["franchise"], "store_ids": w["store_ids"],
+                                "watch_ids": [w["id"]], "since": w.get("created_at")})
+
+    for job in jobs.values():
+        if job["kind"] == "watch_search":
+            entries = job["payload"]["queries"]
+            entries.sort(key=lambda e: (e["query"], e["franchise"] or ""))
+            for e in entries:  # payloads are JSON
+                e["since"] = e["since"].isoformat() if isinstance(e["since"], datetime) else e["since"]
     return list(jobs.values())

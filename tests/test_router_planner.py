@@ -84,9 +84,10 @@ def retailer(rid, adapter="shopify", enabled=True):
     return {"id": rid, "adapter": adapter, "enabled": enabled}
 
 
-def watch(wid, kind="keyword", query="Pokemon 30th", retailer_id=None, store_ids=None, franchise=None, interval=None):
+def watch(wid, kind="keyword", query="Pokemon 30th", retailer_id=None, store_ids=None, franchise=None, interval=None,
+          **kw):
     return dict(id=wid, kind=kind, query=query, retailer_id=retailer_id, store_ids=store_ids,
-                franchise=franchise, interval_seconds=interval, enabled=True)
+                franchise=franchise, interval_seconds=interval, enabled=True, **kw)
 
 
 def plan(retailers, watches):
@@ -95,8 +96,48 @@ def plan(retailers, watches):
 
 def test_keyword_watch_fans_out_to_every_enabled_retailer():
     jobs = plan([retailer("a"), retailer("b"), retailer("c", enabled=False)], [watch(1)])
-    assert {k for k in jobs if k.startswith("search:")} == {"search:a:pokemon 30th:*", "search:b:pokemon 30th:*"}
-    assert jobs["search:a:pokemon 30th:*"]["interval"] == 300
+    assert {k for k in jobs if k.startswith("search:")} == {"search:a", "search:b"}
+    assert jobs["search:a"]["interval"] == 300
+    assert jobs["search:a"]["kind"] == "watch_search"
+    assert jobs["search:a"]["payload"] == {"queries": [
+        {"query": "pokemon 30th", "franchise": None, "store_ids": None, "watch_ids": [1], "since": None},
+    ]}
+
+
+def test_keyword_watches_group_into_one_search_job_per_retailer():
+    from datetime import UTC, datetime
+
+    early, late = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 6, 1, tzinfo=UTC)
+    watches = [
+        watch(1, query="Pokemon 30th", created_at=late),
+        watch(2, query="  pokemon   30TH ", retailer_id="a", store_ids=["westgate"], interval=120, created_at=early),
+        watch(3, query="pokemon 30th", franchise="pokemon"),
+        watch(4, query="Delta Reign", store_ids=["albany"]),
+        watch(5, query="one piece", retailer_id="b", interval=900),
+    ]
+    jobs = plan([retailer("a"), retailer("b")], watches)
+    assert sorted(k for k in jobs if k.startswith("search:")) == ["search:a", "search:b"]  # 5 watches, 2 jobs
+    a, b = jobs["search:a"], jobs["search:b"]
+    assert a["interval"] == 120 and b["interval"] == 300  # the fastest watch in the group
+    assert a["payload"]["queries"] == [
+        {"query": "delta reign", "franchise": None, "store_ids": ["albany"], "watch_ids": [4], "since": None},
+        # same query + franchise merge like they always did: all stores win, watch ids add up
+        {"query": "pokemon 30th", "franchise": None, "store_ids": None, "watch_ids": [1, 2],
+         "since": early.isoformat()},
+        {"query": "pokemon 30th", "franchise": "pokemon", "store_ids": None, "watch_ids": [3], "since": None},
+    ]
+    assert [(q["query"], q["franchise"], q["watch_ids"]) for q in b["payload"]["queries"]] == [
+        ("delta reign", None, [4]), ("one piece", None, [5]), ("pokemon 30th", None, [1]), ("pokemon 30th", "pokemon", [3]),
+    ]
+    assert b["payload"]["queries"][2]["since"] == late.isoformat()
+
+
+def test_retailers_without_search_get_no_search_job():
+    from tcgpings.retailers.mightyape import MightyApeAdapter
+
+    assert not MightyApeAdapter.supports_search
+    jobs = plan([retailer("a"), retailer("ape", adapter=MightyApeAdapter.adapter_name)], [watch(1)])
+    assert "search:a" in jobs and "search:ape" not in jobs
 
 
 def test_store_capable_retailers_get_a_store_sync_job():

@@ -147,3 +147,83 @@ async def test_discovery_searches_keep_only_card_titles():
     routes = {"https://www.jbhifi.co.nz/products.json": {"products": []}, "https://www.jbhifi.co.nz/search/suggest.json": suggest}
     a = JBHiFiAdapter({**ROW, "id": rid, "adapter": "jbhifi", "name": name, "config": config}, FakeHttp(routes))
     assert [p.sku for p in await a.discover()] == ["etb"]
+
+
+# --- grouped search: one job runs every keyword for a shop --------------------------------
+
+QUERIES = ["pokemon", "etb", "30th", "pokemon bundle", "charizard", "one piece", "nothing matches this"]
+
+
+def fixture_routes():
+    return {"https://cardshop.co.nz/search/suggest.json": load_fixture("shopify", "suggest.json"),
+            "https://cardshop.co.nz/products.json": load_fixture("shopify", "products.json")}
+
+
+async def test_search_many_matches_search_for_every_query():
+    single = {query: await adapter(fixture_routes()).search(query) for query in QUERIES}
+    grouped = await adapter(fixture_routes()).search_many(QUERIES)
+    assert list(grouped) == QUERIES
+    assert grouped == single  # same products, same order, same fields
+    assert grouped["pokemon bundle"] and grouped["charizard"] and not grouped["nothing matches this"]
+
+
+async def test_search_many_reads_the_catalogue_once():
+    raw = load_fixture("shopify", "products.json")["products"][2]
+    pages = {str(n): [dict(raw, handle=f"op-{n}-{i}") for i in range(250)] for n in range(1, 5)}
+    routes = fixture_routes()
+    routes["https://cardshop.co.nz/products.json"] = lambda params: {"products": pages.get(params["page"], [])}
+    a = adapter(routes)
+    results = await a.search_many(QUERIES)
+    assert len(results["one piece"]) == 500
+    catalogue = [c[1]["page"] for c in a.http.calls if c[0].endswith("/products.json")]
+    assert catalogue == ["1", "2"]  # catalogue_pages, read once for the whole run
+    assert [c[1]["q"] for c in a.http.calls if c[0].endswith("/suggest.json")] == QUERIES
+
+
+async def test_search_many_keeps_going_when_one_query_fails():
+    def suggest(params):
+        if params["q"] == "etb":
+            raise RuntimeError("suggest broke")
+        return load_fixture("shopify", "suggest.json")
+
+    routes = fixture_routes()
+    routes["https://cardshop.co.nz/search/suggest.json"] = suggest
+    results = await adapter(routes).search_many(["pokemon", "etb", "30th"])
+    assert isinstance(results["etb"], RuntimeError)
+    assert results["pokemon"] == await adapter(fixture_routes()).search("pokemon")
+    assert results["30th"] == await adapter(fixture_routes()).search("30th")
+
+
+async def test_search_many_fails_every_query_when_the_catalogue_fails():
+    routes = fixture_routes()
+    routes["https://cardshop.co.nz/products.json"] = FetchError("GET products.json: HTTP 403")
+    a = adapter(routes)
+    results = await a.search_many(["pokemon", "etb"])
+    assert all(isinstance(r, FetchError) and "HTTP 403" in str(r) for r in results.values())
+    assert [c[0].rsplit("/", 1)[1] for c in a.http.calls] == ["products.json"]  # no suggest calls wasted
+
+
+async def test_default_search_many_runs_search_per_query_and_captures_errors():
+    from tcgpings.retailers.base import RetailerAdapter
+
+    class Plain(RetailerAdapter):
+        adapter_name = "_plain"
+
+        def __init__(self, retailer, http):
+            super().__init__(retailer, http)
+            self.searched = []
+
+        async def search(self, query):
+            self.searched.append(query)
+            if query == "bad":
+                raise RuntimeError("site changed")
+            return [query]
+
+        async def fetch_products(self, skus):
+            return []
+
+    a = Plain(ROW, FakeHttp({}))
+    results = await a.search_many(["a", "bad", "b", "a"])
+    assert a.searched == ["a", "bad", "b"]  # one search() each, in order, duplicates once
+    assert results["a"] == ["a"] and results["b"] == ["b"]
+    assert isinstance(results["bad"], RuntimeError)

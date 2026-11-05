@@ -1,6 +1,7 @@
 """Multi-node behaviour end to end: leader failover and the worker -> outbox -> sender path."""
 
 import asyncio
+from typing import ClassVar
 
 import aiohttp
 import pytest
@@ -17,7 +18,7 @@ from tcgpings.discord.sender import send_batch
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
 from tcgpings.models import Level, Product, Stock, Store
-from tcgpings.net.http import HttpClient
+from tcgpings.net.http import FetchError, HttpClient
 from tcgpings.retailers.base import RetailerAdapter, register
 
 
@@ -120,7 +121,7 @@ async def test_keyword_watch_to_store_alert(pool, tmp_path):
 
     await reconcile(ctx)
     keys = {r["key"] for r in await pool.fetch("SELECT key FROM jobs")}
-    assert keys == {"stores:fake", "search:fake:pokemon 30th:*"}
+    assert keys == {"stores:fake", "search:fake"}
 
     await run_due(worker, ctx)  # store sync + baseline search (creates the store-level auto job)
     await run_due(worker, ctx)  # first store-level check: baseline
@@ -163,8 +164,146 @@ async def test_failing_adapter_is_recorded_and_backed_off(pool, tmp_path):
     assert ctx.stats.jobs_failed == 1
 
 
+# --- grouped keyword searches: one job per retailer ----------------------------------------
+
+
+@register
+class FakeSearchRetailer(RetailerAdapter):
+    """Search results by query; a query mapped to an exception fails."""
+    adapter_name = "_fake_search"
+    supports_store_stock = True
+    listings: ClassVar[dict] = {}
+    batches: ClassVar[list] = []
+
+    async def search(self, query):
+        found = self.listings.get(query, [])
+        if isinstance(found, Exception):
+            raise found
+        return [Product(self.retailer_id, sku, title, f"https://fake/{sku}", online=Stock(Level.IN))
+                for sku, title in found]
+
+    async def search_many(self, queries):
+        self.batches.append(list(queries))
+        return await super().search_many(queries)
+
+    async def fetch_products(self, skus):
+        return []
+
+
+BUNDLE = ("bb30", "Pokémon TCG: 30th Celebration Booster Bundle")
+ETB = ("etb-dr", "Pokémon TCG: Destined Rivals Elite Trainer Box")
+OP_BOX = ("op10", "One Piece Card Game OP-10 Booster Box")
+
+
+async def search_job(pool):
+    return await pool.fetchrow("SELECT * FROM jobs WHERE kind = 'watch_search'")
+
+
+async def test_reconcile_replaces_per_query_search_jobs_with_one_per_retailer(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "fake", "_fake_search", "Fake")
+    # Jobs planned before searches were grouped: one per keyword.
+    for query in ("pokemon 30th", "one piece"):
+        await pool.execute(
+            "INSERT INTO jobs (key, kind, retailer_id, payload, interval_seconds) VALUES ($1, 'watch_search', 'fake', $2, 300)",
+            f"search:fake:{query}:*", {"query": query, "franchise": None, "store_ids": None, "watch_ids": [1]},
+        )
+    await queries.add_watch(pool, "keyword", "Pokemon 30th", None, None, None, None)
+    await queries.add_watch(pool, "keyword", "One Piece", None, None, None, None)
+    await reconcile(ctx)
+    rows = await pool.fetch("SELECT key, payload FROM jobs WHERE kind = 'watch_search'")
+    assert [r["key"] for r in rows] == ["search:fake"]
+    assert [q["query"] for q in rows[0]["payload"]["queries"]] == ["one piece", "pokemon 30th"]
+
+
+async def test_one_search_job_runs_every_keyword(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    FakeSearchRetailer.listings = {"pokemon 30th": [BUNDLE], "one piece": [OP_BOX]}
+    await queries.upsert_retailer(pool, "fake", "_fake_search", "Fake")
+    w1 = await queries.add_watch(pool, "keyword", "Pokemon 30th", None, ["westgate"], None, None)
+    w2 = await queries.add_watch(pool, "keyword", "One Piece", None, None, None, None)
+    await reconcile(ctx)
+    await run_due(Worker(ctx), ctx)
+    assert FakeSearchRetailer.batches == [["one piece", "pokemon 30th"]]
+    assert {r["sku"] for r in await pool.fetch("SELECT sku FROM products")} == {"bb30", "op10"}
+    # Each keyword's finds still get a store-level job owned by that keyword's watch.
+    auto = {r["key"]: r for r in await pool.fetch("SELECT * FROM jobs WHERE auto")}
+    assert auto["sku:fake:bb30"]["watch_id"] == w1 and auto["sku:fake:bb30"]["payload"]["store_ids"] == ["westgate"]
+    assert auto["sku:fake:op10"]["watch_id"] == w2 and auto["sku:fake:op10"]["payload"]["store_ids"] is None
+
+
+async def test_old_single_query_search_job_still_runs(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    FakeSearchRetailer.listings = {"pokemon 30th": [BUNDLE]}
+    await queries.upsert_retailer(pool, "fake", "_fake_search", "Fake")
+    watch_id = await queries.add_watch(pool, "keyword", "Pokemon 30th", None, None, None, None)
+    await pool.execute(
+        "INSERT INTO jobs (key, kind, retailer_id, payload, interval_seconds) VALUES ($1, 'watch_search', 'fake', $2, 300)",
+        "search:fake:pokemon 30th:*",
+        {"query": "pokemon 30th", "franchise": None, "store_ids": None, "watch_ids": [watch_id]},
+    )
+    await run_due(Worker(ctx), ctx)  # no reconcile yet: the job still has the old payload
+    assert ctx.stats.jobs_failed == 0
+    assert FakeSearchRetailer.batches == [["pokemon 30th"]]
+    assert await pool.fetchval("SELECT sku FROM products") == "bb30"
+    assert (await search_job(pool))["last_ok_at"] is not None
+    assert await pool.fetchval("SELECT watch_id FROM jobs WHERE key = 'sku:fake:bb30'") == watch_id
+
+    FakeSearchRetailer.listings = {"pokemon 30th": RuntimeError("site changed")}
+    await run_due(Worker(ctx), ctx)
+    job = await search_job(pool)
+    assert job["consecutive_failures"] == 1 and job["last_error"] == "RuntimeError: site changed"
+
+
+async def test_one_failing_keyword_does_not_fail_the_search_job(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    FakeSearchRetailer.listings = {"pokemon 30th": [BUNDLE], "one piece": RuntimeError("site changed")}
+    await queries.upsert_retailer(pool, "fake", "_fake_search", "Fake")
+    await queries.add_watch(pool, "keyword", "Pokemon 30th", None, None, None, None)
+    await queries.add_watch(pool, "keyword", "One Piece", None, None, None, None)
+    await reconcile(ctx)
+    await run_due(Worker(ctx), ctx)
+    job = await search_job(pool)
+    assert ctx.stats.jobs_failed == 0
+    assert job["consecutive_failures"] == 0 and job["last_error"] is None
+    assert await pool.fetchval("SELECT sku FROM products") == "bb30"
+
+    # Only when every keyword fails does the job fail (and keep the error, so 403/404 can pause it).
+    FakeSearchRetailer.listings = {"pokemon 30th": FetchError("GET x: HTTP 403"), "one piece": FetchError("GET y: HTTP 403")}
+    await run_due(Worker(ctx), ctx)
+    job = await search_job(pool)
+    assert ctx.stats.jobs_failed == 1
+    assert job["consecutive_failures"] == 1 and "HTTP 403" in job["last_error"]
+
+
+async def test_keyword_added_to_a_running_search_job_gets_its_own_baseline(pool, tmp_path):
+    ctx = make_ctx(pool, "nuc1", tmp_path)
+    await queries.upsert_retailer(pool, "fake", "_fake_search", "Fake")
+    await queries.add_route(pool, 1, "https://discord.test/all", "fake")
+    worker = Worker(ctx)
+    FakeSearchRetailer.listings = {"pokemon 30th": []}
+    await queries.add_watch(pool, "keyword", "Pokemon 30th", None, None, None, None)
+    await reconcile(ctx)
+    await run_due(worker, ctx)  # the job's baseline
+
+    # A new keyword joins the job, which has already run: what it finds now is already listed, not new.
+    FakeSearchRetailer.listings = {"pokemon 30th": [BUNDLE], "destined rivals": [ETB]}
+    await queries.add_watch(pool, "keyword", "Destined Rivals", None, None, None, None)
+    await reconcile(ctx)
+    await run_due(worker, ctx)
+    announced = await pool.fetch("SELECT payload->>'sku' AS sku FROM alert_outbox WHERE payload->>'type' = 'new_product'")
+    assert [r["sku"] for r in announced] == ["bb30"]
+
+    FakeSearchRetailer.listings["destined rivals"] = [ETB, ("etb-dr-2", "Pokémon TCG: Destined Rivals Booster Box")]
+    await run_due(worker, ctx)
+    announced = await pool.fetch("SELECT payload->>'sku' AS sku FROM alert_outbox WHERE payload->>'type' = 'new_product'")
+    assert sorted(r["sku"] for r in announced) == ["bb30", "etb-dr-2"]
+
+
 @pytest.fixture(autouse=True)
 def reset_fake():
+    FakeSearchRetailer.listings = {}
+    FakeSearchRetailer.batches = []
     FakeStoreRetailer.stock = {"westgate": Stock(Level.OUT, 0), "albany": Stock(Level.IN, 3)}
     FakeStoreRetailer.calls = []
 

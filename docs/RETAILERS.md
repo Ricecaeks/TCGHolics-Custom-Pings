@@ -28,6 +28,7 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
   - `GET /products.json?limit=250&page=N` returns the catalogue, **most recently updated first**, which is what catches new listings. Only the first `config.catalogue_pages` pages are read (default 2, i.e. 500 products), because singles shops can be huge. Card Merchant had about 9,750 products in October 2026. For small shops, raise `catalogue_pages` to scan the whole catalogue.
   - `GET /products/<handle>.js` returns a single product. Prices are in cents.
   - Keyword matching checks the title, product type and tags.
+  - Each shop has one search job that runs every keyword watch. It reads the catalogue pages once, makes one `suggest.json` call per keyword, and matches every keyword against that one copy of the catalogue. With 12 keywords that is 14 requests a run instead of 36.
 - SKU = the product handle, the URL slug after `/products/`.
 - Stock is IN/OUT only, because Shopify doesn't expose inventory counts publicly.
 - When a single card's title doesn't name the game, the game is taken from the product type or tags.

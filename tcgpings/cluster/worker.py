@@ -42,6 +42,13 @@ def _listed_stock(adapter: Any, product: Any) -> tuple[dict | None, dict | None]
     return product.stores, {sid: adapter.store_label(sid) for sid in product.stores}
 
 
+def _search_entries(payload: dict) -> list[dict]:
+    """A search job's queries. Jobs planned before searches were grouped per retailer hold just one."""
+    if "queries" in payload:
+        return payload["queries"]
+    return [payload]
+
+
 def daily_check_due(age: float | None, now: datetime, at: dt_time, sku: str) -> bool:
     """Has this product's store stock been checked since today's refresh (`at` plus its own offset)?
 
@@ -236,14 +243,33 @@ class Worker:
                 room -= 1
 
     async def _watch_search(self, job: Any) -> None:
-        payload = job["payload"]
+        """Run every keyword of a retailer's search job. One failing query doesn't stop the others;
+        the job only fails when they all did."""
         retailer = await self.ctx.adapters.retailer(job["retailer_id"])
         adapter = await self.ctx.adapters.get(job["retailer_id"])
-        # The first successful run is a baseline: everything already listed isn't "new".
-        announce = job["last_ok_at"] is not None
-        franchise = payload.get("franchise")
+        entries = _search_entries(job["payload"])
+        results = await adapter.search_many([e["query"] for e in entries])
+        errors = []
+        for entry in entries:
+            found = results.get(entry["query"])
+            if isinstance(found, Exception):
+                errors.append(found)
+                if len(entries) > 1:
+                    log.warning("%s search %r failed: %s: %s", job["retailer_id"], entry["query"],
+                                type(found).__name__, found)
+                continue
+            await self._record_search(job, retailer, adapter, entry, found or [])
+        if errors and len(errors) == len(entries):
+            raise errors[0]
 
-        results = await adapter.search(payload["query"])
+    async def _record_search(self, job: Any, retailer: Any, adapter: Any, payload: dict, results: list) -> None:
+        """What one keyword's search found: filter, record and give store-capable finds their own job."""
+        # The first successful run is a baseline: everything already listed isn't "new". A keyword added
+        # to a job that already ran gets its own baseline: the job hasn't succeeded since it was added.
+        last_ok = job["last_ok_at"]
+        since = payload.get("since")
+        announce = last_ok is not None and (since is None or last_ok > datetime.fromisoformat(since))
+        franchise = payload.get("franchise")
         kept = 0
         for product in results:
             if not is_sealed_product(product.title, product.franchise, product.ptype):
