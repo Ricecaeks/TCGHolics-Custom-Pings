@@ -10,7 +10,7 @@ import discord
 from discord import app_commands
 
 from tcgpings.classify import FRANCHISE_NAMES, franchise_of
-from tcgpings.cluster.leadership import SCAN_HISTORY, reconcile, scan_issues
+from tcgpings.cluster.leadership import PAUSED_LISTED, SCAN_HISTORY, describe_paused, reconcile, scan_issues
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.discord import layout, setup
@@ -641,19 +641,27 @@ async def status_cmd(interaction: discord.Interaction) -> None:
         rid = h["retailer_id"]
         last = f"{int(now - h['last_ok_at'].timestamp())}s ago" if h["last_ok_at"] else "never"
         scan_bad = any(k.split(":", 1)[1] == rid for k in warnings)
-        icon = "🔴" if h["failing"] == h["jobs"] else ("🟡" if h["failing"] or h["overdue"] or scan_bad else "🟢")
+        icon = "🔴" if h["jobs"] and h["failing"] == h["jobs"] else ("🟡" if h["failing"] or h["overdue"] or scan_bad else "🟢")
         scan = scans.get(rid)
         scanned = ""
         if scan is not None and scan["products"] is not None:
             usual = f" (usual {scan['usual']:.0f})" if scan["usual"] is not None else ""
             scanned = f" · last scan {scan['products']} products{usual}"
+        paused = f" · {h['paused']} paused" if h["paused"] else ""
         lines.append(
-            f"{icon} `{rid}` · {h['jobs']} jobs · {h['failing']} failing"
+            f"{icon} `{rid}` · {h['jobs']} jobs · {h['failing']} failing{paused}"
             f" · {h['overdue']} overdue · last ok {last}{scanned}"
         )
     if warnings:
         lines.append("\n**Scan warnings**")
         lines += [f"⚠️ {text}" for text in warnings.values()]
+    paused_rows = await queries.paused_jobs(ctx.pool)
+    if paused_rows:
+        lines.append(f"\n**Paused checks** ({len(paused_rows)}, retried daily)")
+        lines += [f"⏸️ {describe_paused(r)} · since <t:{int(r['paused_at'].timestamp())}:R>"
+                  for r in paused_rows[:PAUSED_LISTED]]
+        if len(paused_rows) > PAUSED_LISTED:
+            lines.append(f"…and {len(paused_rows) - PAUSED_LISTED} more")
     backlog = await queries.outbox_backlog(ctx.pool)
     size = await queries.database_size_mb(ctx.pool)
     lines.append(

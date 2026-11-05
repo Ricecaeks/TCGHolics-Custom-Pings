@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import zlib
 from datetime import datetime, timedelta
 from datetime import time as dt_time
@@ -26,6 +27,12 @@ log = logging.getLogger(__name__)
 POLL_SECONDS = 2
 NZ = ZoneInfo("Pacific/Auckland")
 DAILY_SPREAD_SECONDS = 3600
+# The retailer answered 403 (blocked) or 404 (gone): retrying every few minutes won't change that.
+DEAD_ERROR = re.compile(r"\bHTTP (?:403|404)\b")
+
+
+def is_dead_error(error: str | None) -> bool:
+    return bool(error and DEAD_ERROR.search(error))
 
 
 def _listed_stock(adapter: Any, product: Any) -> tuple[dict | None, dict | None]:
@@ -85,16 +92,19 @@ class Worker:
         try:
             await self.run_job(job)
             self.ctx.stats.jobs_ok += 1
+            if job["paused_at"]:
+                log.info("job %s works again: resumed after being paused since %s", job["key"], job["paused_at"])
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             self.ctx.stats.jobs_failed += 1
             error = f"{type(exc).__name__}: {exc}"[:500]
-            log.warning("job %s failed: %s", job["key"], error)
+            # A paused check's daily retry is expected to fail; don't fill the log with it.
+            log.log(logging.INFO if job["paused_at"] else logging.WARNING, "job %s failed: %s", job["key"], error)
         finally:
             keeper.cancel()
         try:
-            await queries.finish_job(self.ctx.pool, job["id"], self.ctx.node_name, error)
+            await queries.finish_job(self.ctx.pool, job["id"], self.ctx.node_name, error, is_dead_error(error))
         except Exception:
             log.exception("could not release job %s (lease will expire)", job["key"])
 

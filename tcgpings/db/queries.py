@@ -160,8 +160,16 @@ async def extend_lease(db: DB, job_id: int, node: str, lease_seconds: int) -> bo
     return result.endswith(" 1")
 
 
-async def finish_job(db: DB, job_id: int, node: str, error: str | None = None) -> None:
-    """Release the lease and schedule the next run. Failures back off exponentially (max 30 min)."""
+PAUSE_AFTER = 20  # 403/404 failures in a row before a product check is paused
+PAUSE_RETRY_SECONDS = 24 * 3600  # a paused check is retried once a day
+
+
+async def finish_job(db: DB, job_id: int, node: str, error: str | None = None, dead: bool = False) -> None:
+    """Release the lease and schedule the next run. Failures back off exponentially (max 30 min).
+
+    `dead` marks an error that retrying won't fix (HTTP 403 or 404). After PAUSE_AFTER of those in a row a
+    product check (watch_sku) is paused: it runs once a day instead, and a success un-pauses it.
+    """
     await db.execute(
         """
         UPDATE jobs SET
@@ -172,15 +180,49 @@ async def finish_job(db: DB, job_id: int, node: str, error: str | None = None) -
             last_error = coalesce($3, last_error),
             last_error_at = CASE WHEN $3::text IS NULL THEN last_error_at ELSE now() END,
             consecutive_failures = CASE WHEN $3::text IS NULL THEN 0 ELSE consecutive_failures + 1 END,
+            dead_failures = CASE WHEN $3::text IS NOT NULL AND $4 THEN dead_failures + 1 ELSE 0 END,
+            paused_at = CASE WHEN $3::text IS NULL THEN NULL
+                             WHEN paused_at IS NOT NULL THEN paused_at
+                             WHEN $4 AND kind = 'watch_sku' AND dead_failures + 1 >= $5 THEN now()
+                        END,
+            paused_reason = CASE WHEN $3::text IS NULL THEN NULL
+                                 WHEN paused_at IS NOT NULL THEN paused_reason
+                                 WHEN $4 AND kind = 'watch_sku' AND dead_failures + 1 >= $5 THEN $3
+                            END,
+            pause_reported = CASE WHEN paused_at IS NULL THEN false ELSE pause_reported END,
             next_run_at = now() + make_interval(secs =>
                 CASE WHEN $3::text IS NULL
                      THEN interval_seconds * (0.9 + random() * 0.2)
+                     WHEN paused_at IS NOT NULL OR ($4 AND kind = 'watch_sku' AND dead_failures + 1 >= $5)
+                     THEN $6 * (0.95 + random() * 0.1)
                      ELSE least(interval_seconds * power(2, least(consecutive_failures + 1, 6)), 1800)
                 END)
         WHERE id = $1 AND lease_owner = $2
         """,
-        job_id, node, error,
+        job_id, node, error, dead, PAUSE_AFTER, float(PAUSE_RETRY_SECONDS),
     )
+
+
+async def paused_jobs(db: DB, unreported_only: bool = False) -> list[asyncpg.Record]:
+    """Paused product checks, oldest pause first, with the product's title when it's known."""
+    return await db.fetch(
+        """
+        SELECT j.id, j.retailer_id, j.payload->>'sku' AS sku, p.title, j.paused_at, j.paused_reason,
+               j.dead_failures, j.next_run_at
+        FROM jobs j
+        LEFT JOIN products p ON p.retailer_id = j.retailer_id AND p.sku = j.payload->>'sku'
+        WHERE j.paused_at IS NOT NULL AND (NOT $1 OR NOT j.pause_reported)
+        ORDER BY j.paused_at, j.id
+        """,
+        unreported_only,
+    )
+
+
+async def mark_pauses_reported(db: DB, job_ids: list[int]) -> None:
+    if job_ids:
+        await db.execute(
+            "UPDATE jobs SET pause_reported = true WHERE id = ANY($1::bigint[]) AND paused_at IS NOT NULL", job_ids
+        )
 
 
 async def release_leases(db: DB, node: str) -> None:
@@ -265,8 +307,9 @@ async def job_health(db: DB) -> list[asyncpg.Record]:
     return await db.fetch(
         """
         SELECT retailer_id,
-               count(*) AS jobs,
-               count(*) FILTER (WHERE consecutive_failures > 0) AS failing,
+               count(*) FILTER (WHERE paused_at IS NULL) AS jobs,
+               count(*) FILTER (WHERE consecutive_failures > 0 AND paused_at IS NULL) AS failing,
+               count(*) FILTER (WHERE paused_at IS NOT NULL) AS paused,
                max(last_ok_at) AS last_ok_at,
                count(*) FILTER (WHERE next_run_at < now() - interval '5 minutes'
                                   AND lease_owner IS NULL) AS overdue
