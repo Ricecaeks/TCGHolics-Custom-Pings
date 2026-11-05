@@ -961,3 +961,20 @@ async def recent_products(db: DB, retailer_id: str | None, limit: int) -> list[a
         """,
         retailer_id, limit,
     )
+
+
+# --- bot settings ----------------------------------------------------------------------
+
+
+async def get_setting(db: DB, key: str) -> str | None:
+    return await db.fetchval("SELECT value FROM bot_settings WHERE key = $1", key)
+
+
+async def set_setting(db: DB, key: str, value: str) -> None:
+    await db.execute(
+        """
+        INSERT INTO bot_settings (key, value) VALUES ($1, $2)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+        """,
+        key, value,
+    )

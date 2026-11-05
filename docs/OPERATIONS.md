@@ -37,6 +37,16 @@ grep ERROR /opt/tcgpings/data/logs/bot-*.log*              # search every node a
 
 `docker logs tcgpings-worker-http-1 --tail 200 -f` (or `tcgpings-control-1`, `tcgpings-worker-browser-1`) also works, but it only goes back to the last deploy, because every deploy replaces the containers.
 
+### #bot-logs in Discord
+
+Every node's warnings and errors also go to **#bot-logs** in the Staff category, so you can read them from your phone.
+
+- The leader creates the channel in the first category whose name contains "Staff", with that category's permissions. It checks every 10 minutes and recreates the channel if it's deleted. If there's no Staff category, it makes a private one that only `STAFF_ROLE_ID` and the bot can see. You can rename or move the channel; the bot finds it by its name, `bot-logs`.
+- Each node posts every 30 seconds, as `logs · <node>`. Repeated lines are collapsed (`×4`). A node posts at most 3 messages at a time, and anything past that is counted ("… N more lines not posted") and left in the log file. Discord's rate limits can never slow the bot down.
+- API keys, tokens and webhook links are hidden (`***`) before posting.
+- `BOT_LOGS_LEVEL=INFO` in `.env` sends everything, which is very chatty; the default is `WARNING`. `BOT_LOGS_CATEGORY` picks another category; `BOT_LOGS_CHANNEL=` (empty) turns it off.
+- If the bot can't make the channel (it needs Manage Channels and Manage Webhooks), it says so once in the staff log channel.
+
 Database shell on the NUC: `docker exec -it tcgpings-db-1 psql -U tcgpings -d tcgpings`.
 
 ## Updating

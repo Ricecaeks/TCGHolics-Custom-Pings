@@ -55,6 +55,10 @@ async def lead(ctx: Context) -> None:
             tasks.append(layout_loop(ctx, bot))
         if ctx.settings.log_channel_id:
             tasks.append(news_loop(ctx, bot))
+        if ctx.settings.bot_logs_channel and ctx.settings.guild_id:
+            from tcgpings.discord.botlogs import bot_logs_setup_loop
+
+            tasks.append(bot_logs_setup_loop(ctx, bot, AUTO_SETUP_SECONDS))
     else:
         log.warning("DISCORD_TOKEN not set: slash commands are disabled (alerts still send via webhooks)")
     tasks.append(health_loop(ctx, bot))

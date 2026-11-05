@@ -18,6 +18,7 @@ from tcgpings.config import Settings
 from tcgpings.context import AdapterCache, Context
 from tcgpings.db import queries
 from tcgpings.db.pool import create_pool, migrate
+from tcgpings.discord import botlogs
 from tcgpings.discord.sender import sender_loop
 from tcgpings.engine.pipeline import Pipeline
 from tcgpings.engine.router import RouteCache
@@ -107,6 +108,7 @@ def node_tasks(ctx: Context, worker: Worker) -> list[tuple[Coroutine, str]]:
 
 
 async def run(settings: Settings) -> None:
+    log_handler = botlogs.install(settings)  # first, so startup problems reach #bot-logs too
     ctx = await build_context(settings)
     try:
         await migrate(ctx.pool)
@@ -127,6 +129,8 @@ async def run(settings: Settings) -> None:
 
         worker = Worker(ctx)
         tasks = [asyncio.create_task(t, name=name) for t, name in node_tasks(ctx, worker)]
+        if log_handler is not None:
+            tasks.append(asyncio.create_task(botlogs.post_loop(ctx, log_handler), name="bot-logs"))
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
