@@ -17,6 +17,8 @@ from tcgpings.discord import layout, setup
 from tcgpings.discord.embeds import sample_event
 from tcgpings.engine.keywords import KeywordFilter
 from tcgpings.models import ANY_STORE, ONLINE, Event, EventType, slugify
+from tcgpings.net.chain import spend_limits
+from tcgpings.net.http import SPEND_LIMIT_KEY
 from tcgpings.retailers import REGISTRY, build_adapter
 
 log = logging.getLogger(__name__)
@@ -473,6 +475,7 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
     @app_commands.command(name="set", description="Tune a retailer")
     @app_commands.autocomplete(retailer=retailer_autocomplete)
     @app_commands.choices(proxy_policy=[app_commands.Choice(name=p, value=p) for p in ("direct", "pool", "sticky")])
+    @app_commands.describe(unblocker_limit_usd="This store's own monthly cap on paid unblocker spend (US$); 0 removes it")
     async def set(
         self,
         interaction: discord.Interaction,
@@ -480,6 +483,7 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
         enabled: bool | None = None,
         proxy_policy: app_commands.Choice[str] | None = None,
         requests_per_minute: app_commands.Range[int, 1, 600] | None = None,
+        unblocker_limit_usd: app_commands.Range[float, 0, 1000] | None = None,
     ) -> None:
         ctx = _ctx(interaction)
         ok = await queries.update_retailer(
@@ -487,6 +491,9 @@ class RetailerGroup(app_commands.Group, name="retailer", description="Retailers 
             proxy_policy=proxy_policy.value if proxy_policy else None,
             requests_per_minute=requests_per_minute,
         )
+        if unblocker_limit_usd is not None:  # this store's own monthly cap on paid unblocker spend; 0 removes it
+            ok = await queries.set_retailer_config(
+                ctx.pool, retailer, SPEND_LIMIT_KEY, unblocker_limit_usd or None) or ok
         await ctx.adapters.refresh(force=True)
         await _reply(interaction, f"Updated `{retailer}`." if ok else f"Nothing changed for `{retailer}`.")
 
@@ -674,11 +681,42 @@ async def status_cmd(interaction: discord.Interaction) -> None:
         for b in await queries.list_breakers(ctx.pool):
             state = f"resting {int(b['open_seconds'] // 60)} min" if b["is_open"] else "ok"
             lines.append(f"{'🔴' if b['is_open'] else '🟢'} `{b['retailer_id']}` {b['backend']}: {state}")
-        spend = await queries.month_spend_by_backend(ctx.pool)
-        total = sum(r["cost_usd"] for r in spend)
-        detail = ", ".join(f"{r['backend']} {r['requests']} req ${r['cost_usd']:.2f}" for r in spend) or "nothing yet"
-        lines.append(f"**Unblocker spend** ${total:.2f} / ${s.unblocker_monthly_budget_usd:.2f} this month ({detail})")
+        limits = spend_limits(await queries.list_retailers(ctx.pool))
+        lines += spend_lines(await queries.month_spend_rows(ctx.pool), limits, ctx.http.chain.budget_usd,
+                             ctx.http.chain.cap_usd(), ctx.http.chain.low_ratio)
     await _reply(interaction, "\n".join(lines))
+
+
+def spend_lines(rows, limits: dict[str, float], budget: float, cap: float, low_ratio: float = 0.8) -> list[str]:
+    """/status: this month's paid unblocker spend against the cap, then each store's, biggest first."""
+    total = sum(r["cost_usd"] for r in rows)
+    if budget > 0:
+        head = f"**Unblocker spend** ${total:.2f} / ${budget:.2f} cap this month"
+        if 0 < cap < budget:
+            head += f" (the routes' own caps stop it at ${cap:.2f})"
+    else:
+        head = f"**Unblocker spend** ${total:.2f} this month (no cap)"
+    stores: dict[str, list] = {}
+    for r in rows:
+        stores.setdefault(r["retailer_id"], []).append(r)
+    for rid in limits:
+        stores.setdefault(rid, [])
+    if not stores:
+        return [head + ": nothing yet"]
+    lines = [head]
+    spent = {rid: sum(r["cost_usd"] for r in rs) for rid, rs in stores.items()}
+    for rid in sorted(stores, key=lambda k: (-spent[k], k)):
+        limit = limits.get(rid)
+        icon = ""
+        if limit:
+            icon = "🔴 " if spent[rid] >= limit else ("🟡 " if spent[rid] >= low_ratio * limit else "")
+        name = f"`{rid}`" if rid else "earlier (no store recorded)"
+        amount = f"${spent[rid]:.2f}" + (f" / ${limit:.2f} limit" if limit else "")
+        routes = ", ".join(f"{r['backend']} {r['requests']} req" for r in stores[rid])
+        failed = sum(r["failed"] for r in stores[rid])
+        lines.append(f"• {icon}{name} {amount}" + (f" · {routes}" if routes else "")
+                     + (f" · {failed} billed failures" if failed else ""))
+    return lines
 
 
 @app_commands.command(name="keywords-test", description="Preview which recent products a keyword filter would alert on")

@@ -78,7 +78,7 @@ class FakeChain:
     def available(self, order):
         return list(order)
 
-    async def budget_low(self):
+    async def budget_low(self, policy=None):
         return self.low
 
     async def fetch_text(self, policy, origin, url, headers=None, order=None):

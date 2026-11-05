@@ -26,6 +26,8 @@ QUEUE_MARKERS = re.compile(
     re.I,
 )
 PROXY_BAN_SECONDS = 600
+# The retailer config key holding its own monthly limit on paid unblocker spend (US$), see net/chain.py.
+SPEND_LIMIT_KEY = "unblocker_monthly_usd"
 
 
 class FetchError(Exception):
@@ -33,6 +35,8 @@ class FetchError(Exception):
         super().__init__(message)
         # The retailer's own HTTP status when it answered (e.g. 404), None for network/route failures.
         self.status = status
+        # What a paid unblocker billed for this failed request in USD (some failures are still billed).
+        self.cost_usd = 0.0
 
 
 class Blocked(FetchError):
@@ -52,10 +56,14 @@ class NetPolicy:
     retailer_id: str
     requests_per_minute: float = 30
     proxy_policy: str = "direct"
+    # This retailer's own monthly cap on paid unblocker spend in USD (config SPEND_LIMIT_KEY); 0 = none.
+    spend_limit_usd: float = 0.0
 
     @classmethod
     def from_row(cls, row: Any) -> NetPolicy:
-        return cls(row["id"], row["requests_per_minute"], row["proxy_policy"])
+        config = row.get("config") or {}
+        return cls(row["id"], row["requests_per_minute"], row["proxy_policy"],
+                   float(config.get(SPEND_LIMIT_KEY) or 0))
 
 
 class HttpClient:

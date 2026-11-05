@@ -42,6 +42,7 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 ## Rate limits and blocks
 
 - Each retailer has a cluster-wide **requests per minute** budget (default 30), changed with `/retailer set requests_per_minute:`. Nodes behind the same public IP share the budget. Each additional IP or proxy adds capacity.
+- Paid unblocker spend (ScrapFly, Zyte) is capped at US$100 a month across all retailers. A retailer can also get its own monthly limit with `/retailer set unblocker_limit_usd:` (0 removes it); `/status` shows each one's spend. See HOSTING.md §6.
 - A 403, a 429 or a captcha page counts as **blocked**. The job backs off exponentially, up to 30 minutes.
 - **Dead product checks pause themselves.** After 20 failures in a row that are all HTTP 403 or 404, a product check is paused. Timeouts and 5xx errors never pause a check. A paused check is retried once a day and resumes on its own as soon as a retry works. Each new pause is posted once to the staff log channel, and `/status` lists every paused check with its retailer, product, reason and pause time. Discovery and search jobs are never paused.
   - If a retailer stays 🔴, first try lowering its rate.

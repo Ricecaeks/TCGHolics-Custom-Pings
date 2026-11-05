@@ -107,7 +107,7 @@ async def test_budget_ratio():
     assert not await c.budget_low()
     await c.fetch_text(POLICY, "o", URL)
     assert not await c.budget_low()  # 50%
-    await c.store.spend("scrapfly", 0.3)
+    await c.store.spend("farmers", "scrapfly", 0.3)
     assert await c.budget_low()  # 80%
 
 

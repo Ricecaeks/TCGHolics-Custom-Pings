@@ -114,7 +114,7 @@ DataDome on every page, and the site serves the store for the visitor's **countr
 
 - **Schedule:** new listings and online stock come from Constructor every 2 min (below). Each tracked product's store stock and price are checked **once a day**, at a fixed slot between 8:30 and 9:30am NZ time, after the 8am the site mentions. That's our schedule, not a Farmers one.
 - **Cost of a daily check:** 1 product page + 1 call per region with a wanted store (13 for all stores).
-- **Regions:** config `regions` limits them (default all 13). Once 80% of the month's unblocker budget is spent, only `priority_regions` are checked (default `["AUK"]`).
+- **Regions:** config `regions` limits them (default all 13). Once 80% of the month's unblocker budget (or of Farmers' own limit, `/retailer set unblocker_limit_usd:`) is spent, only `priority_regions` are checked (default `["AUK"]`).
 - **Request budget:** 10 requests/min.
 - **Akamai:** plain `curl_cffi` got 2 answers, then 403s, and every automated browser variant was denied in testing. When Chrome is denied it rests for 24 h and the unblockers take over; it's retried on its own afterwards. Details in [HOSTING.md §6](HOSTING.md#6-farmers-status-and-next-steps).
 
