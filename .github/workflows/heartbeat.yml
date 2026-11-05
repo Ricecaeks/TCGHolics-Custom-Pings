@@ -1,4 +1,4 @@
-# Runs on the bot's own machine, so a success proves the machine is awake, the bot healthy,
+# Runs on the bot's own machine (the NUC), so a success proves the machine is awake, the bot healthy,
 # and that it's actually working: some job succeeded and no alert sat unsent in the last 15 minutes.
 # A failed run emails the owner; watchdog.yml runs on GitHub's side and raises the alarm in
 # Discord when these successes stop.
@@ -15,28 +15,33 @@ permissions: {}
 
 jobs:
   beat:
-    runs-on: [self-hosted, tcgpings]
+    runs-on: [self-hosted, tcgpings-nuc]
     timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Check the bot is healthy
-        shell: powershell
         run: |
-          $status = docker inspect -f '{{.State.Health.Status}}' tcgpings-local-node-1
-          "bot: $status"
-          if ($status -ne 'healthy') { exit 1 }
+          # Every container of the stack that has a healthcheck must be healthy, and there must be some.
+          out=$(docker ps -a --filter label=com.docker.compose.project=tcgpings --format '{{.Names}} {{.State}} {{.Status}}')
+          echo "$out"
+          [ -n "$out" ] || { echo "::error::The tcgpings stack isn't running"; exit 1; }
+          if echo "$out" | grep -v '(healthy)' | grep -q .; then
+            echo "::error::A container isn't running or isn't healthy"; exit 1
+          fi
       - name: Check jobs and alerts ran recently
-        shell: powershell
         run: |
           # Read-only. Alerts that gave up after 8 tries (attempts >= 8) are left out: the leader
           # already posts about those in the log channel, and they'd fail every beat until purged.
-          $sql = 'SELECT coalesce(floor(extract(epoch FROM now() - max(last_ok_at)) / 60)::int, -1), ' +
-            '(SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts < 8 AND created_at < now() - make_interval(mins => 15)), ' +
-            '(SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts >= 8) FROM jobs'
-          $out = docker exec tcgpings-local-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c $sql
-          if ($LASTEXITCODE -ne 0) { "database query failed"; exit 1 }
-          $jobAge, $stuck, $dead = "$out".Trim().Split('|') | ForEach-Object { [int]$_ }
-          "last successful job: $jobAge min ago; alerts unsent over 15 min: $stuck; given up: $dead"
-          $failed = $false
-          if ($jobAge -lt 0 -or $jobAge -ge 15) { "::error::No job has succeeded in the last 15 minutes"; $failed = $true }
-          if ($stuck -gt 0) { "::error::$stuck alert(s) unsent for over 15 minutes"; $failed = $true }
-          if ($failed) { exit 1 }
+          sql="SELECT coalesce(floor(extract(epoch FROM now() - max(last_ok_at)) / 60)::int, -1),
+            (SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts < 8 AND created_at < now() - make_interval(mins => 15)),
+            (SELECT count(*) FROM alert_outbox WHERE sent_at IS NULL AND attempts >= 8) FROM jobs"
+          out=$(docker exec tcgpings-db-1 psql -U tcgpings -d tcgpings -tAX -v ON_ERROR_STOP=1 -c "$sql") \
+            || { echo "::error::database query failed"; exit 1; }
+          IFS='|' read -r job_age stuck dead <<< "$out"
+          echo "last successful job: $job_age min ago; alerts unsent over 15 min: $stuck; given up: $dead"
+          failed=0
+          if [ "$job_age" -lt 0 ] || [ "$job_age" -ge 15 ]; then echo "::error::No job has succeeded in the last 15 minutes"; failed=1; fi
+          if [ "$stuck" -gt 0 ]; then echo "::error::$stuck alert(s) unsent for over 15 minutes"; failed=1; fi
+          exit $failed

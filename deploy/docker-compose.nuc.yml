@@ -1,0 +1,52 @@
+# The production stack on the NUC (Linux, i5-5250U, 16 GB): Postgres + the bot.
+# The deploy workflow runs it from the runner's checkout with .env and data/ in TCGPINGS_HOME (/opt/tcgpings):
+#   TCGPINGS_ENV=/opt/tcgpings/.env TCGPINGS_DATA=/opt/tcgpings/data \
+#     docker compose -f deploy/docker-compose.nuc.yml -p tcgpings up -d --build
+name: tcgpings
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tcgpings
+      POSTGRES_PASSWORD: tcgpings
+      POSTGRES_DB: tcgpings
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "effective_cache_size=4GB",
+              "-c", "work_mem=8MB", "-c", "max_connections=100"]
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tcgpings"]
+      interval: 5s
+      retries: 20
+    mem_limit: 2g
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  node:
+    image: tcgpings:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: ${TCGPINGS_ENV:-../.env}
+    environment:
+      DATABASE_URL: postgresql://tcgpings:tcgpings@db:5432/tcgpings
+      NODE_NAME: ${NODE_NAME:-nuc}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ${TCGPINGS_DATA:-../data}:/app/data
+    stop_grace_period: 30s
+    shm_size: 1g        # Chrome needs more than Docker's 64 MB default
+    mem_limit: 3g
+    logging: *logging
+
+volumes:
+  pgdata:

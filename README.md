@@ -21,7 +21,9 @@ Every node runs the same container. Nodes coordinate only through Postgres:
 
 ## Quick start
 
-**One PC or laptop (current setup).** This runs Postgres and one monitor node, capped at 2 CPU threads and 2 GB of RAM:
+**Production** runs on the NUC from [`deploy/docker-compose.nuc.yml`](deploy/docker-compose.nuc.yml), deployed by GitHub Actions on every merge to `main` (see [docs/HOSTING.md](docs/HOSTING.md) §2).
+
+**One PC or laptop (development).** This runs Postgres and one monitor node, capped at 2 CPU threads and 2 GB of RAM:
 
 1. Copy `.env.example` to `.env` and fill in the Discord values (see [docs/SETUP.md](docs/SETUP.md) §1). `DATABASE_URL` isn't needed here.
 2. Start the stack:
@@ -32,7 +34,7 @@ Every node runs the same container. Nodes coordinate only through Postgres:
 
 **[docs/ALERTS.md](docs/ALERTS.md)** is the staff guide to routes, keywords (e.g. `30th booster bundle, etb, upc, -sleeves`), role pings and add-to-cart links.
 
-**[docs/HOSTING.md](docs/HOSTING.md)** covers resource use, gaming-friendly limits, the always-on laptop with auto-deploy, cloud options and how each retailer's bot protection is handled.
+**[docs/HOSTING.md](docs/HOSTING.md)** covers resource use, the NUC and its auto-deploy, cloud options and how each retailer's bot protection is handled.
 
 **Several machines (cluster):**
 

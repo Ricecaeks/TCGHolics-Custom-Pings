@@ -1,6 +1,6 @@
 # Hosting, resources and anti-bot options
 
-Written 2026-10-29. Measurements are from the local stack (`deploy/docker-compose.local.yml`) on an i5-14400F with 32 GB RAM. Prices come from vendor pages and comparison sites; check current pricing before buying anything.
+Written 2026-10-29, updated 2026-11-06 for the move to the NUC. Section 1's measurements are from the local stack on an i5-14400F with 32 GB RAM. Prices come from vendor pages and comparison sites; check current pricing before buying anything.
 
 ## 1. What it actually costs to run
 
@@ -17,44 +17,16 @@ Written 2026-10-29. Measurements are from the local stack (`deploy/docker-compos
 - Plus Farmers: **about 650 MB** while its Chrome is open.
 - All of the browser-backed retailers below: **about 1.5–2 GB**.
 
-The node is hard-capped at **2 CPU threads and 2 GB RAM**. If it ever goes over, Docker restarts it rather than slowing your PC down.
+## 2. Production: the NUC
 
-### How many containers?
+The bot runs on the NUC (Intel i5-5250U, 2 cores / 4 threads, 16 GB RAM, AlmaLinux 9) on the home connection. Nothing of it runs on GGPC any more; GGPC only holds the code for development.
 
-**One node per machine.** Extra containers on the same PC don't add capacity:
-- They share the same IP, and the per-retailer rate limits are split between nodes that share an IP.
-- One node already runs 8 checks in parallel (`WORKER_CONCURRENCY`).
-
-Extra nodes only help on **other machines or other IPs**, such as the laptop plus a cloud box. The design supports that whenever you want it.
-
-### Keeping games smooth (Docker Desktop on Windows)
-
-Docker Desktop runs inside a WSL2 virtual machine that can take up to half your RAM and every core. Cap it by creating `C:\Users\<you>\.wslconfig`:
-
-```ini
-[wsl2]
-memory=6GB
-processors=4
-```
-
-Then run `wsl --shutdown` and restart Docker Desktop. With 26 GB and 12 threads always left for Windows and games, and the monitor's own 2-thread / 2 GB cap, there's no measurable impact on gaming. The only visible effect is a ~2 s CPU blip on a couple of cores when Chrome launches, at most a few times an hour.
-
-## 2. The always-on gaming laptop
-
-The same `docker-compose.local.yml` works unchanged. To make it a dependable appliance:
-
-1. **Docker Desktop:** Settings → General → *Start Docker Desktop when you sign in*. The containers already use `restart: unless-stopped`.
-2. **Windows power settings:**
-   - Sleep: *Never* when plugged in.
-   - Lid close: *Do nothing*.
-   - Turn off *USB selective suspend*.
-   - Set Windows Update active hours so restarts happen overnight.
-3. **Auto sign-in after reboots**, using `netplwiz` or Sysinternals Autologon, so Docker Desktop starts after Windows Update restarts the machine.
-4. **GitHub self-hosted runner:** the deploy machine is **GGPC**. It runs one runner per repo, because a runner on a personal account serves a single repo: `ggpc` for Clipping, and `ggpc-tcgpings` (label `tcgpings`, in `C:\actions-runner-tcgpings`) for this one. Both use GGPC's one Docker Desktop. `ggpc-tcgpings` starts at sign-in under your Windows account, from the *TCGPings GitHub Runner* entry in your user's Run registry key. [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) then rebuilds and restarts the stack on every push to `main`, but only after the tests pass.
-   - `.env` and `data/` live in `C:\tcgpings` (repository variable `TCGPINGS_HOME`), outside the checkout. The database stays in the `tcgpings-local_pgdata` Docker volume.
-   - The `SCRAPFLY_API_KEY` and `ZYTE_API_KEY` repository secrets are copied into that `.env` on each deploy. A secret that isn't set leaves the value in `.env` alone.
-5. Gaming laptops run hot at 24/7 idle, so put it on a stand. Battery-charge limiting in the vendor app (e.g. 60–80%) extends battery life.
-6. **Offline alert:** [`heartbeat.yml`](../.github/workflows/heartbeat.yml) runs on this machine every 15 minutes. It checks the bot is healthy, some job succeeded in the last 15 minutes, and no alert has sat unsent for over 15 minutes (see OPERATIONS.md). [`watchdog.yml`](../.github/workflows/watchdog.yml) runs on GitHub's side. If there's been no healthy heartbeat for 60 minutes, it posts once as the bot to the `LOG_CHANNEL_ID` channel, tagging the `OFFLINE_PING_USER_ID` repository variable, and opens a "Bot offline" issue. It closes the issue and posts again when heartbeats return. GitHub's schedules can run late, so an outage can take over an hour to show. GitHub also pauses schedules after 60 days without repository activity.
+- **Reaching it:** `ssh nuc` on the LAN (192.168.1.101), or `ssh nuc-ts` over Tailscale (100.71.153.11). User `admin`, passwordless sudo.
+- **Stack:** [`deploy/docker-compose.nuc.yml`](../deploy/docker-compose.nuc.yml), Compose project `tcgpings`: `tcgpings-db-1` (Postgres 17, data in the `tcgpings_pgdata` volume) and the bot. Every container uses `restart: unless-stopped` and Docker starts at boot, so the stack comes back by itself after a power cut.
+- **Config:** `.env` and `data/` (backups, logs, Chrome profile) live in `/opt/tcgpings` (repository variable `TCGPINGS_HOME`), outside the checkout. The repository secrets are copied into that `.env` on each deploy; a secret that isn't set leaves the value in `.env` alone.
+- **Deploys:** a GitHub self-hosted runner, `nuc-tcgpings` (label `tcgpings-nuc`, in `/opt/actions-runner-tcgpings`, systemd service `actions.runner.Ricecaeks-TCGHolics-Custom-Pings.nuc-tcgpings`). [`deploy.yml`](../.github/workflows/deploy.yml) rebuilds and restarts the stack on every push to `main`, after the tests pass, and waits until every container is healthy.
+- **Offline alert:** [`heartbeat.yml`](../.github/workflows/heartbeat.yml) runs on the NUC every 15 minutes. It checks every container is healthy, some job succeeded in the last 15 minutes, and no alert has sat unsent for over 15 minutes (see OPERATIONS.md). [`watchdog.yml`](../.github/workflows/watchdog.yml) runs on GitHub's side. If there's been no healthy heartbeat for 60 minutes, it posts once as the bot to the `LOG_CHANNEL_ID` channel, tagging the `OFFLINE_PING_USER_ID` repository variable, and opens a "Bot offline" issue. It closes the issue and posts again when heartbeats return. GitHub's schedules can run late, so an outage can take over an hour to show. GitHub also pauses schedules after 60 days without repository activity.
+- **Network:** the NUC is on Wi-Fi and shares the home public IP. Per-retailer request limits are per IP, so another machine on this connection wouldn't add capacity.
 
 A home connection is the **best place to run this**. NZ residential IPs are trusted far more by Akamai, Cloudflare and DataDome than cloud IPs (see §4).
 
@@ -62,7 +34,7 @@ A home connection is the **best place to run this**. NZ residential IPs are trus
 
 | Option | Cost (approx.) | Pros | Cons |
 |---|---|---|---|
-| **Home PC / laptop** (now) | $0 | NZ residential IP (best for bot protection), plenty of RAM for Chrome | power/internet outages, Windows updates |
+| **Home mini PC** (now: the NUC) | $0 | NZ residential IP (best for bot protection), plenty of RAM for Chrome | power/internet outages, Windows updates |
 | **Raspberry Pi 5 / mini PC at home** | one-off $150–400 | same residential-IP advantage, low power, silent | ARM Pi can't run Google Chrome (only Chromium, which is more detectable). An x86 mini PC avoids that |
 | **Budget VPS, Sydney** (Vultr ~US$5/mo, DigitalOcean ~US$4/mo, Cloudzy, Lightsail) | US$5–25/mo for 1–4 GB | always on, near NZ | **datacenter IP: Akamai/DataDome sites will block it**, so Farmers/Kmart/Mighty Ape need residential proxies on top. Need ≥2 GB RAM per Chrome |
 | **NZ VPS** (local hosts, ~$13–21/mo) | ~NZ$15–30/mo | NZ IP | still a datacenter IP |
@@ -144,7 +116,7 @@ Price and store stock go through `tcgpings/net/chain.py`, which tries each route
 | 3. Zyte API (`ZYTE_API_KEY`) | ~US$1.27 per 1,000 (hardest tier, plain HTTP), pay as you go | rests 1 h |
 
 - Breakers are kept in Postgres (`fetch_breakers`), so every node shares them and they survive restarts. A bad key or empty account (401/402) rests that service for 24 h; three network errors in a row rest a route for 30 min. A retailer's own 404 is an answer, not a failure.
-- **Spend cap:** US$100 a month across every store (`UNBLOCKER_MONTHLY_BUDGET_USD`, default 100 in `tcgpings/config.py`; add the line to the deploy `.env` to override). Each route also stops at its own cap: the ScrapFly plan's credits (`SCRAPFLY_MONTHLY_CREDITS` × `SCRAPFLY_USD_PER_CREDIT`, US$30 on Discovery) and `ZYTE_MONTHLY_BUDGET_USD` (30). When those add up to less than the total, they're the real ceiling, so the 80% and 100% marks are measured against the lower figure. At 80% Farmers checks only its priority regions; at 100% the paid routes stop until next month and the free ones keep going. Set a matching limit in each provider's dashboard as a second backstop.
+- **Spend cap:** US$100 a month across every store (`UNBLOCKER_MONTHLY_BUDGET_USD`, default 100 in `tcgpings/config.py`; add the line to the deploy `.env` to override). Each route also stops at its own cap: the ScrapFly plan's credits (`SCRAPFLY_MONTHLY_CREDITS` × `SCRAPFLY_USD_PER_CREDIT`, US$30 on Discovery) and `ZYTE_MONTHLY_BUDGET_USD` (70, the rest of the US$100; match it with the usage limit in Zyte's dashboard). When those add up to less than the total, they're the real ceiling, so the 80% and 100% marks are measured against the lower figure. At 80% Farmers checks only its priority regions; at 100% the paid routes stop until next month and the free ones keep going. Set a matching limit in each provider's dashboard as a second backstop.
 - **Spend per store:** every paid request is recorded against its retailer and route (`unblocker_spend`). A store can carry its own monthly limit so it can't eat the whole budget: `/retailer set retailer:farmers unblocker_limit_usd:40` (0 removes it; stored as config `unblocker_monthly_usd`). Past it, that store's paid routes pause until next month while its free route and every other store carry on; at 80% of it Farmers cuts back to its priority regions.
 - **Billed failures count too.** ScrapFly's `X-Scrapfly-Api-Cost` header is the credits billed, failures included: failed scrapes are normally free, but an upstream 4xx/5xx is billed (404, 405, 422 and 424 aren't covered by its failure protection), and once 30% of 1,000+ scrapes in 24 h are blocked without the Unblocker, every failure is billed for a while. Zyte bills every HTTP 200 it returns, even when the site's own answer inside it is a 403, 404 or waiting room; its 520/521 bans, 429/503 throttling and other errors are free. Zyte returns no cost, so it's estimated from `ZYTE_USD_PER_REQUEST`. `/status` shows billed failures per store.
 - **Staff pings only when it can't fix itself:** budget at 80% or used up, a store at its own limit, or every route for a retailer blocked for more than a day. `/status` shows each route's state and this month's spend per store against the cap and its limit.

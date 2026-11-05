@@ -43,7 +43,7 @@ jobs:
           issue=$(gh issue list --state open --search 'in:title "Bot offline"' --json number -q '.[0].number')
           if [ "$age" -ge "$MAX_AGE_MINUTES" ] && [ -z "$issue" ]; then
             # Post first: if Discord fails, no issue is open and the next run tries again.
-            post ":warning: **Stock alerts are offline.** No healthy heartbeat from GGPC for $age minutes, so drops may be missed."
+            post ":warning: **Stock alerts are offline.** No healthy heartbeat from the NUC for $age minutes, so drops may be missed."
             gh issue create --title "Bot offline" --body "No healthy heartbeat since $last."
           elif [ "$age" -lt "$MAX_AGE_MINUTES" ] && [ -n "$issue" ]; then
             post ":white_check_mark: **Stock alerts are back online.** Anything that changed during the outage alerts on the next check."
