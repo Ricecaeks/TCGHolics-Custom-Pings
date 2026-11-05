@@ -16,7 +16,7 @@ from tcgpings.classify import is_sealed_product
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.engine.pipeline import classify_product
-from tcgpings.engine.planner import sku_job_key
+from tcgpings.engine.planner import retailer_sku_interval, sku_job_key
 from tcgpings.engine.router import keyword_routes_match
 from tcgpings.models import Product, Store
 from tcgpings.net.http import Blocked
@@ -237,7 +237,8 @@ class Worker:
         await queries.delete_jobs(self.ctx.pool, stale)
         room = self.ctx.settings.max_tracked_per_retailer - (len(existing) - len(stale))
         tracked = {r["sku"] for r in existing}
-        interval = adapter.default_sku_interval or self.ctx.settings.default_sku_interval
+        interval = retailer_sku_interval(await self.ctx.adapters.retailer(adapter.retailer_id), adapter,
+                                         self.ctx.settings.default_sku_interval)
         for sku in skus:
             if sku in tracked:
                 continue
@@ -293,7 +294,7 @@ class Worker:
                     sku_job_key(job["retailer_id"], product.sku),
                     job["retailer_id"],
                     {"sku": product.sku, "store_ids": payload.get("store_ids"), "watch_ids": payload["watch_ids"]},
-                    adapter.default_sku_interval or self.ctx.settings.default_sku_interval,
+                    retailer_sku_interval(retailer, adapter, self.ctx.settings.default_sku_interval),
                     payload["watch_ids"][0],
                 )
         log.debug("%s search %r: %d results, %d kept", job["retailer_id"], payload["query"], len(results), kept)

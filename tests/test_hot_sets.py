@@ -88,7 +88,7 @@ async def test_hot_products_get_faster_checks_and_return_to_normal(pool):
         await queries.upsert_product(pool, Product("toyworld", sku, title, f"https://x/{sku}"))
         await queries.add_discovery_job(pool, f"sku:toyworld:{sku}", "toyworld", sku, T.default_sku_interval)
     await queries.mark_hot(pool, "delta reign", 14)
-    ctx = SimpleNamespace(pool=pool)
+    ctx = SimpleNamespace(pool=pool, settings=SimpleNamespace(default_sku_interval=60))
 
     async def intervals():
         return {r["payload"]["sku"]: r["interval_seconds"] for r in await pool.fetch("SELECT * FROM jobs WHERE kind = 'watch_sku'")}
@@ -98,3 +98,25 @@ async def test_hot_products_get_faster_checks_and_return_to_normal(pool):
     await queries.unmark_hot(pool, "delta reign")
     await apply_hot_intervals(ctx)
     assert await intervals() == {"hot": T.default_sku_interval, "cold": T.default_sku_interval}
+
+
+async def test_retailer_check_interval_moves_found_products_and_back(pool):
+    from tcgpings.engine.planner import SKU_INTERVAL_KEY
+    from tcgpings.retailers.toyworld import ToyworldAdapter as T
+
+    await queries.upsert_retailer(pool, "toyworld", "toyworld", "Toyworld", {"domain": "x"})
+    for sku, title in (("hot", "Pokemon Delta Reign Booster Bundle"), ("cold", "Lorcana Azurite Sea Booster")):
+        await queries.upsert_product(pool, Product("toyworld", sku, title, f"https://x/{sku}"))
+        await queries.add_discovery_job(pool, f"sku:toyworld:{sku}", "toyworld", sku, T.default_sku_interval)
+    await queries.mark_hot(pool, "delta reign", 14)
+    ctx = SimpleNamespace(pool=pool, settings=SimpleNamespace(default_sku_interval=60))
+
+    async def intervals():
+        return {r["payload"]["sku"]: r["interval_seconds"] for r in await pool.fetch("SELECT * FROM jobs WHERE kind = 'watch_sku'")}
+
+    await queries.set_retailer_config(pool, "toyworld", SKU_INTERVAL_KEY, 3600)
+    await apply_hot_intervals(ctx)
+    assert await intervals() == {"hot": T.hot_sku_interval, "cold": 3600}  # hot products stay fast
+    await queries.set_retailer_config(pool, "toyworld", SKU_INTERVAL_KEY, None)
+    await apply_hot_intervals(ctx)
+    assert await intervals() == {"hot": T.hot_sku_interval, "cold": T.default_sku_interval}

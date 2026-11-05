@@ -9,6 +9,20 @@ from typing import Any
 from tcgpings.retailers.base import REGISTRY
 
 
+SKU_INTERVAL_KEY = "sku_interval"  # retailer config key: seconds between its product checks (overrides the adapter's)
+MIN_SKU_INTERVAL = 30
+
+
+def retailer_sku_interval(retailer: Mapping[str, Any], cls: Any, default: int) -> int:
+    """How often a retailer's products are checked: its config's "sku_interval" (set with /retailer set
+    check_minutes:), else its adapter's default, else the global DEFAULT_SKU_INTERVAL. A watch's own
+    interval still wins over all three, and hot products still get the adapter's faster hot interval."""
+    value = (retailer.get("config") or {}).get(SKU_INTERVAL_KEY)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= MIN_SKU_INTERVAL:
+        return value
+    return cls.default_sku_interval or default
+
+
 def sku_job_key(retailer_id: str, sku: str) -> str:
     return f"sku:{retailer_id}:{sku}"
 
@@ -58,7 +72,7 @@ def plan_jobs(
                 continue
             key = sku_job_key(w["retailer_id"], w["query"])
             cls = REGISTRY[by_id[w["retailer_id"]]["adapter"]]
-            interval = w["interval_seconds"] or cls.default_sku_interval or sku_interval
+            interval = w["interval_seconds"] or retailer_sku_interval(by_id[w["retailer_id"]], cls, sku_interval)
             existing = jobs.get(key)
             if existing:
                 existing["payload"]["store_ids"] = _merge_stores(existing["payload"]["store_ids"], w["store_ids"])

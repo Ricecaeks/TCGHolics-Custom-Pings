@@ -681,7 +681,7 @@ async def list_hot_watches(db: DB) -> list[asyncpg.Record]:
 async def store_check_jobs(db: DB) -> list[asyncpg.Record]:
     return await db.fetch(
         """
-        SELECT j.id, j.interval_seconds, r.adapter, p.title
+        SELECT j.id, j.interval_seconds, r.adapter, r.config, p.title
         FROM jobs j
         JOIN retailers r ON r.id = j.retailer_id
         JOIN products p ON p.retailer_id = j.retailer_id AND p.sku = j.payload->>'sku'
