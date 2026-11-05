@@ -10,7 +10,7 @@ Written 2026-10-29, updated 2026-11-06 for the move to the NUC. Section 1's meas
 | Postgres (local) | **50 MB** | <1% | capped at 256 MB / 0.5 CPU |
 | + each open Chrome session | **+~520 MB** | ~1.2 cores for 2–3 s at launch, then <0.3 core | one per browser-backed retailer (Farmers, maybe Kmart/Woolworths). Closed after 10 idle minutes |
 | Docker image | 2.0 GB disk | — | mostly Chrome and its libraries |
-| Network (Shopify) | — | — | ~1.5 MB per search run. 6 search jobs every 5 min ≈ 2.6 GB/day |
+| Network (Shopify) | — | — | ~1.5 MB per catalogue read; one keyword-search job per shop every 5 min |
 
 **Realistic totals on your PC:**
 - Shopify shops only: **about 130 MB RAM**, almost no CPU.
