@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     log_dir: str = "data/logs"
     log_file_max_mb: int = 25
     log_file_keep: int = 7
+    # Every node's log lines at bot_logs_level and above also go to this staff channel, in batches.
+    # The leader creates it in the first category whose name contains bot_logs_category. "" turns it off.
+    bot_logs_channel: str = "bot-logs"
+    bot_logs_category: str = "Staff"
+    bot_logs_level: str = "WARNING"
 
     @model_validator(mode="after")
     def _empty_lanes_mean_none(self) -> "Settings":
