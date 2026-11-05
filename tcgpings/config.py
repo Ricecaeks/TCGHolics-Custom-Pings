@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     dry_run: bool = False
     log_level: str = "INFO"
+    # `run` also writes here (inside the mounted data folder, so it survives redeploys).
+    # A new file each day or at log_file_max_mb; the newest log_file_keep old ones are kept. "" turns it off.
+    log_dir: str = "data/logs"
+    log_file_max_mb: int = 25
+    log_file_keep: int = 7
 
     @property
     def proxies(self) -> list[str]:

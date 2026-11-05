@@ -14,11 +14,19 @@ from pathlib import Path
 from tcgpings.config import Settings
 
 
-def _setup_logging(settings: Settings) -> None:
+def _setup_logging(settings: Settings, to_file: bool = False) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if to_file and settings.log_dir:
+        from tcgpings.logfile import file_handler
+
+        try:
+            handlers.append(file_handler(settings.log_dir, settings.log_file_max_mb, settings.log_file_keep))
+        except OSError as e:  # never stop the bot over its log file
+            print(f"log file disabled: {e}", file=sys.stderr)
     logging.basicConfig(
         level=settings.log_level.upper(),
         format=f"%(asctime)s {settings.node_name} %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
+        handlers=handlers,
     )
     logging.getLogger("discord").setLevel(logging.WARNING)
 
@@ -176,7 +184,8 @@ def main(argv: list[str] | None = None) -> None:
     settings = Settings()
     if getattr(args, "dry_run", False):
         settings.dry_run = True
-    _setup_logging(settings)
+    # Only the long-running node writes the file; healthchecks and admin commands would race its rotation.
+    _setup_logging(settings, to_file=args.cmd == "run")
 
     if args.cmd == "health":
         raise SystemExit(_health(settings))
