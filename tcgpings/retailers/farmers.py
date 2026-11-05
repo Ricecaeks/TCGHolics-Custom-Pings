@@ -12,6 +12,12 @@ Two access paths:
                   one call per region; "In Stock" / "Not In Stock" per store.
    Config "fetch" sets the route order, "regions" limits the regions checked (default: all 13),
    and "priority_regions" is what's kept once the unblocker budget runs low (default: Auckland).
+   The store endpoint needs a region (without one it answers an empty list; tried 2026-11-06), so a day's
+   check is products x regions requests. To spend the ScrapFly plan (already paid for) before Zyte (paid per
+   request), the "backup_routes" (default Zyte) are only used once every other paid route is out of budget
+   for the month: a blocked ScrapFly rests an hour and the check waits for it. The day's check is spread
+   over STORE_SPREAD seconds after 8:30 so Akamai sees a trickle, and a region already read for a product
+   in the last REGION_REUSE seconds isn't read again when an interrupted check resumes.
 Stores have no ids on the site, only names; the store id is the slugified name.
 Farmers' add-to-cart is a signed form post, so alerts link to the product page.
 """
@@ -22,6 +28,7 @@ import html
 import json
 import re
 import logging
+import time as clock
 import uuid
 from datetime import time
 from importlib import resources
@@ -42,6 +49,9 @@ CONSTRUCTOR_KEY = "key_wafe8wrKCXfPyWKw"  # public client key embedded in farmer
 TRADING_CARDS_GROUP = "51-070502"         # Toys > Games, Cards & Puzzles > Trading Cards
 FETCH_ORDER = ["browser", "scrapfly", "zyte"]
 PRIORITY_REGIONS = ["AUK"]
+BACKUP_ROUTES = ["zyte"]
+STORE_SPREAD = 4 * 3600
+REGION_REUSE = 6 * 3600
 
 AVAILABILITY = {
     "InStock": Level.IN,
@@ -175,6 +185,7 @@ class FarmersAdapter(RetailerAdapter):
     supports_store_stock = True
     # The site says store stock was "updated at 8am this morning", so each product is checked once a day after that.
     store_stock_daily_at = time(8, 30)
+    store_stock_daily_spread = STORE_SPREAD
     default_sku_interval = 15 * 60
     default_search_interval = 30 * 60
     supports_discovery = True
@@ -189,6 +200,9 @@ class FarmersAdapter(RetailerAdapter):
         self.fetch_order = list(self.config.get("fetch") or FETCH_ORDER)
         self.regions = self.config.get("regions")  # None = all
         self.priority_regions = list(self.config.get("priority_regions") or PRIORITY_REGIONS)
+        backups = self.config.get("backup_routes")
+        self.backup_routes = set(BACKUP_ROUTES if backups is None else backups)
+        self._region_reads: dict[tuple[str, str], tuple[float, dict[str, Stock]]] = {}
         self._cio = {"key": self.config.get("constructor_key", CONSTRUCTOR_KEY), "c": "ciojs-client-2.0",
                      "i": str(uuid.uuid4()), "s": "1"}
 
@@ -213,7 +227,17 @@ class FarmersAdapter(RetailerAdapter):
     async def _get(self, url: str) -> str:
         if self._chain is None:
             raise FetchError("farmers needs the fetch chain (browser or unblocker) but this node has none")
-        return await self._chain.fetch_text(self.policy, BASE + "/", url, XHR, self.fetch_order)
+        return await self._chain.fetch_text(self.policy, BASE + "/", url, XHR, await self._routes())
+
+    async def _routes(self) -> list[str]:
+        """The route order, minus the backup routes while another paid route still has budget this month."""
+        main = [r for r in self.fetch_order if r not in self.backup_routes]
+        if len(main) == len(self.fetch_order):
+            return self.fetch_order
+        for name in main:
+            if await self._chain.within_budget(name, self.policy):
+                return main
+        return self.fetch_order
 
     async def search(self, query: str) -> list[Product]:
         return await self._constructor(f"/search/{quote(query)}", num_results_per_page="100")
@@ -253,12 +277,19 @@ class FarmersAdapter(RetailerAdapter):
         if (allowed := await self._regions_to_check()) is not None:
             regions &= allowed
         stock: dict[str, Stock] = {}
+        now = clock.time()
+        self._region_reads = {k: v for k, v in self._region_reads.items() if now - v[0] < REGION_REUSE}
         for region in sorted(regions):
-            url = (f"{ISH}/ViewCheckoutShipping-GetAvailableStoresAjax"
-                   f"?CountryCode=NZ&NoShippingFilter=true&SKU={quote(sku)}&State={region}")
-            for store_id, s in parse_store_stock(await self._get(url)).items():
+            read = self._region_reads.get((sku, region))
+            if read is None:  # a check cut short (every route resting) resumes where it stopped
+                url = (f"{ISH}/ViewCheckoutShipping-GetAvailableStoresAjax"
+                       f"?CountryCode=NZ&NoShippingFilter=true&SKU={quote(sku)}&State={region}")
+                read = self._region_reads[(sku, region)] = (now, parse_store_stock(await self._get(url)))
+            for store_id, s in read[1].items():
                 if store_id in wanted:
                     stock[store_id] = s
+        for region in regions:  # done: the next check (tomorrow) reads them again
+            self._region_reads.pop((sku, region), None)
         return stock
 
     def parse_ref(self, ref: str) -> str:

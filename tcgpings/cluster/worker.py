@@ -49,19 +49,25 @@ def _search_entries(payload: dict) -> list[dict]:
     return [payload]
 
 
-def daily_check_due(age: float | None, now: datetime, at: dt_time, sku: str) -> bool:
+def daily_check_due(age: float | None, now: datetime, at: dt_time, sku: str,
+                    spread: int = DAILY_SPREAD_SECONDS) -> bool:
     """Has this product's store stock been checked since today's refresh (`at` plus its own offset)?
 
-    Each SKU gets a fixed offset within the hour after `at`, so a retailer's daily sweep is
+    Each SKU gets a fixed offset within `spread` seconds after `at`, so a retailer's daily sweep is
     spread out instead of every product hitting the site at once.
     """
     if age is None:
         return True
-    offset = timedelta(seconds=zlib.crc32(sku.encode()) % DAILY_SPREAD_SECONDS)
+    offset = timedelta(seconds=zlib.crc32(sku.encode()) % max(spread, 1))
     slot = datetime.combine(now.date(), at, now.tzinfo) + offset
     if slot > now:
         slot -= timedelta(days=1)
     return now - timedelta(seconds=age) < slot
+
+
+def price_refresh_due(sku: str, now: datetime) -> bool:
+    """A known price is re-read once a week, each product on its own weekday."""
+    return zlib.crc32(sku.encode()) % 7 == now.weekday()
 
 
 class Worker:
@@ -157,8 +163,19 @@ class Worker:
             return True
         age = await queries.seconds_since_store_check(self.ctx.pool, adapter.retailer_id, sku)
         if adapter.store_stock_daily_at:
-            return daily_check_due(age, datetime.now(NZ), adapter.store_stock_daily_at, sku)
+            return daily_check_due(age, datetime.now(NZ), adapter.store_stock_daily_at, sku,
+                                   adapter.store_stock_daily_spread)
         return age is None or age >= min(adapter.store_stock_interval, job_interval)  # hot jobs run sooner
+
+    async def _refresh_details(self, adapter: Any, product: Product) -> None:
+        """Details the listing lacks (Farmers' price, a paid request): fetched when unknown, else once a
+        week on the product's own weekday. Other days keep the last known price."""
+        if product.price_cents is None:
+            known = await queries.online_price(self.ctx.pool, adapter.retailer_id, product.sku)
+            if known is not None and not price_refresh_due(product.sku, datetime.now(NZ)):
+                product.price_cents = known
+                return
+        await adapter.refresh_details(product)
 
     async def _watch_sku(self, job: Any) -> None:
         payload = job["payload"]
@@ -188,7 +205,7 @@ class Worker:
                     stock = None
                 else:
                     if stock:  # once per store check, so a day's checks don't repeat it
-                        await adapter.refresh_details(product)
+                        await self._refresh_details(adapter, product)
                     new = [Store(adapter.retailer_id, sid, adapter.store_label(sid)) for sid in stock if sid not in names]
                     if new:
                         await queries.upsert_stores(self.ctx.pool, new)

@@ -286,3 +286,55 @@ async def test_a_route_past_its_own_cap_rests_while_the_others_carry_on():
     await c.fetch_text(POLICY, "o", URL)  # Zyte has spent $1.20 of its $1.00 now
     await c.fetch_text(POLICY, "o", URL)
     assert (zyte.calls, scrapfly.calls) == (2, 1)
+
+
+def test_daily_check_spread_is_per_adapter():
+    from datetime import datetime, time, timedelta, timezone
+    import zlib
+
+    sku = next(s for s in (f"sku{i}" for i in range(100)) if zlib.crc32(s.encode()) % 14400 > 7200)
+    at = time(8, 30)
+    day = datetime(2026, 11, 6, tzinfo=timezone.utc)
+    ten = day.replace(hour=10)  # 1.5 h after 8:30, before this SKU's slot in a 4-hour spread
+    yesterday = 19 * 3600  # last checked yesterday at 15:00, after yesterday's slot either way
+    assert daily_check_due(yesterday, ten, at, sku), "1-hour spread: its slot has passed"
+    assert not daily_check_due(yesterday, ten, at, sku, spread=4 * 3600), "4-hour spread: still to come"
+    assert daily_check_due(yesterday, ten + timedelta(hours=3), at, sku, spread=4 * 3600)
+
+
+def test_price_refresh_is_weekly_per_product():
+    from datetime import datetime, timedelta
+
+    from tcgpings.cluster.worker import price_refresh_due
+
+    monday = datetime(2026, 11, 2)
+    days = [d for d in range(7) if price_refresh_due("7044417", monday + timedelta(days=d))]
+    assert len(days) == 1
+
+
+async def test_within_budget():
+    store = MemoryChainStore()
+    chain = FetchChain([PaidOk("scrapfly"), PaidOk("zyte"), BrowserBackend(None)], store, budget_usd=10.0,
+                       backend_budgets={"scrapfly": 3.0})
+    policy = NetPolicy("farmers", spend_limit_usd=5.0)
+    assert await chain.within_budget("scrapfly", policy)
+    assert not await chain.within_budget("browser") and not await chain.within_budget("nope")
+    await store.spend("kmart", "scrapfly", 3.0)
+    assert not await chain.within_budget("scrapfly")  # its own cap
+    assert await chain.within_budget("zyte", policy)
+    await store.spend("farmers", "zyte", 5.0)
+    assert not await chain.within_budget("zyte", policy)  # the retailer's own limit
+    assert await chain.within_budget("zyte")
+    await store.spend("kmart", "zyte", 2.0)
+    assert not await chain.within_budget("zyte")  # the month's total
+
+
+class PaidOk:
+    paid = True
+    posts = True
+
+    def __init__(self, name):
+        self.name = name
+
+    async def fetch(self, policy, origin, url, headers):
+        return "ok", 0.0

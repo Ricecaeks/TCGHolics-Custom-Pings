@@ -43,3 +43,11 @@ async def pool():
     await migrate(p)
     yield p
     await p.close()
+
+
+@pytest.fixture(autouse=True)
+def _adapter_state_in_memory(monkeypatch):
+    """Adapters that keep state on disk (Pokémon Center's read times) keep it in memory in tests."""
+    from tcgpings.retailers import pokemoncenter
+
+    monkeypatch.setattr(pokemoncenter, "STATE_DIR", None)

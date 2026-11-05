@@ -121,7 +121,7 @@ def _nz_chain():
 async def test_discover_reads_page_one_then_sweeps_on_schedule_or_stock_change(monkeypatch):
     chain, page1 = _nz_chain()
     a = adapter(chain)
-    clock = [1_000_000.0]
+    clock = [LAUNCH]  # launch day: fast reads
     monkeypatch.setattr(pokemoncenter.time, "time", lambda: clock[0])
 
     first = await a.discover()  # first run: every page (303 products = 10 pages)
@@ -152,7 +152,7 @@ async def test_discover_reads_page_one_then_sweeps_on_schedule_or_stock_change(m
     assert len(chain.calls) == 10  # the 6-hourly sweep
 
 
-async def test_au_and_uk_read_every_ten_minutes_with_their_country(monkeypatch):
+async def test_au_and_uk_read_every_half_hour_with_their_country(monkeypatch):
     clock = [1_000_000.0]
     monkeypatch.setattr(pokemoncenter.time, "time", lambda: clock[0])
     a = adapter(FakeChain(), "pokemoncenter-uk")
@@ -163,9 +163,9 @@ async def test_au_and_uk_read_every_ten_minutes_with_their_country(monkeypatch):
     assert len(chain.calls) == 19 and {c[2] for c in chain.calls} == {"GB"}  # 590 products
     assert chain.calls[0][0].startswith("https://www.pokemoncenter.com/en-gb/category/tcg-cards?")
     chain.calls.clear()
-    clock[0] += 300
+    clock[0] += 900
     assert await a.discover() == []
-    clock[0] += 300
+    clock[0] += 900
     await a.discover()
     assert len(chain.calls) == 1
 
@@ -367,3 +367,61 @@ async def test_overseas_restock_skips_game_channels(pool):
     rows = await pool.fetch("SELECT route_id, payload FROM alert_outbox")
     assert [r["route_id"] for r in rows] == [1]
     assert rows[0]["payload"]["extra"]["overseas"] is True
+
+
+LAUNCH = 1763424000.0  # 2025-11-18T00:00Z, a launch date on the NZ page-1 fixture
+
+
+async def test_slow_reads_between_launches_fast_around_them(monkeypatch):
+    chain, page1 = _nz_chain()
+    a = adapter(chain)
+    clock = [LAUNCH + 30 * 86400]  # a month after: nothing on page 1 is launching
+    monkeypatch.setattr(pokemoncenter.time, "time", lambda: clock[0])
+    await a.discover()
+    assert a.read_interval(clock[0]) == 900
+    chain.calls.clear()
+    clock[0] += 300
+    assert await a.discover() == [] and chain.calls == []  # not due: every 15 minutes
+    clock[0] += 600
+    await a.discover()
+    assert len(chain.calls) == 1
+
+    b = adapter(_nz_chain()[0])
+    clock[0] = LAUNCH + 3600  # launch day
+    await b.discover()
+    assert b.read_interval(clock[0]) == 180
+
+
+async def test_queue_keeps_reads_fast_for_an_hour(monkeypatch):
+    a = adapter(FakeChain(fail=Queued("waiting room", 200)))
+    clock = [LAUNCH + 30 * 86400]
+    monkeypatch.setattr(pokemoncenter.time, "time", lambda: clock[0])
+    await a.discover()
+    assert a.read_interval(clock[0] + 1800) == 180
+    assert a.read_interval(clock[0] + 3700) == 900
+
+
+def test_overseas_stores_read_every_half_hour_and_sweep_daily():
+    for rid in ("pokemoncenter-au", "pokemoncenter-uk"):
+        c = RETAILERS[rid][1]
+        assert (c["every"], c["slow_every"], c["sweep_every"]) == (1800, 1800, 86400)
+    nz = RETAILERS["pokemoncenter-nz"][1]
+    assert (nz["every"], nz["slow_every"], nz["sweep_every"]) == (180, 900, 6 * 3600)
+
+
+async def test_read_times_survive_a_restart(monkeypatch, tmp_path):
+    monkeypatch.setattr(pokemoncenter, "STATE_DIR", tmp_path)
+    clock = [LAUNCH + 30 * 86400]
+    monkeypatch.setattr(pokemoncenter.time, "time", lambda: clock[0])
+    chain, _ = _nz_chain()
+    await adapter(chain).discover()
+    assert len(chain.calls) == 10  # first ever run: the whole range
+    assert (tmp_path / "pokemoncenter-nz.json").is_file()
+    clock[0] += 120
+    chain2, _ = _nz_chain()
+    assert await adapter(chain2).discover() == [] and chain2.calls == []  # restarted: not due yet
+    clock[0] += 900
+    await adapter(chain2).discover()
+    assert len(chain2.calls) == 1  # page 1 only: the sweep isn't due again
+    (tmp_path / "pokemoncenter-nz.json").write_text("not json")
+    assert adapter(_nz_chain()[0])._read_at == 0  # a broken file just starts over

@@ -69,7 +69,7 @@ def test_all_cards_category_and_product_page():
     assert parse_product("<html></html>", "x") is None and parse_category("<html></html>") == []
 
 
-async def test_discover_reads_pokemon_every_run_and_all_cards_every_other(monkeypatch):
+async def test_discover_reads_pokemon_every_half_hour_and_all_cards_every_two_hours(monkeypatch):
     pokemon_url = mightyape.CATEGORY + CATEGORIES[0]["path"]
     cards_url = mightyape.CATEGORY + CATEGORIES[1]["path"]
     chain = FakeChain({pokemon_url: load_fixture("mightyape", "pokemon.html"),
@@ -83,7 +83,8 @@ async def test_discover_reads_pokemon_every_run_and_all_cards_every_other(monkey
     assert all(order == ("scrapfly",) for _, order in chain.calls)
     assert len({p.sku for p in first}) > 36  # both pages, merged
 
-    for minutes, expected in [(30, [pokemon_url]), (60, [pokemon_url, cards_url]), (61, [])]:
+    for minutes, expected in [(30, [pokemon_url]), (60, [pokemon_url]), (90, [pokemon_url]),
+                              (120, [pokemon_url, cards_url]), (121, [])]:
         clock[0] = 1_000_000.0 + minutes * 60
         chain.calls.clear()
         await a.discover()

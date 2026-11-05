@@ -13,9 +13,9 @@ Recon notes for each retailer. An adapter is only marked **live** once it has be
 | Woolworths NZ | `woolworths` | yes (per store) | recon pending (Akamai) |
 | JB Hi-Fi NZ | `jbhifi` | yes: in-stock store IDs in the product page | **live** (discovery, search, price, online + per-store stock for 27 named stores, add-to-cart) |
 | Toyworld | `toyworld` (Shopify) | yes: in / low / out, 36 stores | **live** (discovery of the `trading-cards` + `pokemon` collections, search, price, online + per-store stock, add-to-cart) |
-| Mighty Ape | `mightyape` | — (online only) | **live via ScrapFly** (Pokémon category every 30 min, all trading cards hourly: first page of each, about 2,000 credits a day). No keyword searches. No add-to-cart link |
+| Mighty Ape | `mightyape` | — (online only) | **live via ScrapFly** (Pokémon category every 30 min, all trading cards every 2 h: first page of each, about 1,600 credits a day). No keyword searches. No add-to-cart link |
 | P-Bandai NZ (Premium Bandai) | `pbandai` | — (online only) | **live, plain requests** (the whole Card Games category in one JSON request every 2 min; pre-orders count as in stock while their window is open and not sold out). No keyword searches |
-| Pokémon Center NZ / AU / UK | `pokemoncenter` | — (online only) | **live via Zyte** (sealed TCG range newest-first: page 1 every 3 min for NZ and 10 min for AU/UK, every page when the in-stock count changes and every 6 h; queue detection). No keyword searches. AU and UK are `overseas` |
+| Pokémon Center NZ / AU / UK | `pokemoncenter` | — (online only) | **live via Zyte** (sealed TCG range newest-first: NZ page 1 every 3 min around launches, queues and stock changes, else every 15 min, every page every 6 h; AU/UK page 1 every 30 min, every page daily; every page whenever the in-stock count changes; queue detection; read times saved in `data/state/` so restarts don't re-read). No keyword searches. AU and UK are `overseas` |
 | Whitcoulls | `whitcoulls` | nationwide only: "In Store Only" or not | **live** (discovery via card searches, search, price, online stock). No Pokémon cards in Nov 2026 |
 | Paper Plus | `paperplus` | — (online only) | **live** (Trading Cards category, search, price, online stock; a product leaving the listing counts as sold out) |
 | Retrospace | `retrospace` | — (online only) | **live** (card game categories + newest cards, search, price, online stock with unit counts; a product leaving its category counts as sold out). No add-to-cart link |
@@ -113,7 +113,7 @@ DataDome on every page, and the site serves the store for the visitor's **countr
 1. our own Chrome (`net/browser.py`: Patchright driving Google Chrome, headed, Xvfb in Docker, persistent profile), free;
 2. ScrapFly, then 3. Zyte API, each only when its key is set in `.env`.
 
-- **Schedule:** new listings and online stock come from Constructor every 2 min (below). Each tracked product's store stock and price are checked **once a day**, at a fixed slot between 8:30 and 9:30am NZ time, after the 8am the site mentions. That's our schedule, not a Farmers one.
+- **Schedule:** new listings and online stock come from Constructor every 2 min (below). Each tracked product's store stock is checked **once a day**, at a fixed slot between 8:30am and 12:30pm NZ time (spread so Akamai sees a trickle), after the 8am the site mentions. That's our schedule, not a Farmers one. A known price is re-read once a week per product. The endpoint needs a region (without one it returns nothing), so a check is one request per region. Zyte is held back while ScrapFly (the prepaid plan) still has budget this month: a blocked ScrapFly rests an hour and the check resumes after it, without re-reading the regions already done.
 - **Cost of a daily check:** 1 product page + 1 call per region with a wanted store (13 for all stores).
 - **Regions:** config `regions` limits them (default all 13). Once 80% of the month's unblocker budget (or of Farmers' own limit, `/retailer set unblocker_limit_usd:`) is spent, only `priority_regions` are checked (default `["AUK"]`).
 - **Request budget:** 10 requests/min.
