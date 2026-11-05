@@ -181,11 +181,10 @@ async def ensure_channel(guild: discord.Guild, settings: Settings) -> discord.Te
             overwrites[role] = discord.PermissionOverwrite(view_channel=True)
         category = await guild.create_category(settings.bot_logs_category, overwrites=overwrites,
                                                reason="TCGHolics Pings bot logs")
-    # The category's permissions, plus the bot itself, in case the category hides it from the bot.
-    overwrites = {**category.overwrites,
-                  guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_webhooks=True)}
+    # No overwrites: Discord then syncs the channel to the category's permissions. Sending them ourselves
+    # is refused (403) whenever a category rule covers a permission the bot doesn't hold.
     return await category.create_text_channel(
-        settings.bot_logs_channel, overwrites=overwrites, reason="TCGHolics Pings bot logs",
+        settings.bot_logs_channel, reason="TCGHolics Pings bot logs",
         topic="The bot's warnings and errors from every node, every 30 seconds. Full logs are on the NUC.",
     )
 
@@ -210,6 +209,9 @@ async def bot_logs_setup_loop(ctx: Context, bot, every: float) -> None:
         except Exception as exc:
             log.exception("bot logs channel setup failed")
             problem = f"⚠️ Can't set up #{ctx.settings.bot_logs_channel}: {exc}"
+            if isinstance(exc, discord.Forbidden):
+                problem += (f". The bot needs View Channels, Manage Channels and Manage Webhooks in the "
+                            f"{ctx.settings.bot_logs_category} category.")
             if problem != reported:  # once per distinct problem, e.g. missing Manage Channels
                 await bot.notify_staff(problem)
                 reported = problem

@@ -130,7 +130,7 @@ async def test_ensure_channel_uses_the_staff_category_and_its_permissions():
     channel = await botlogs.ensure_channel(guild, s)
     assert channel.name == "bot-logs"
     (name, kw), = staff.created
-    assert kw["overwrites"]["everyone"] == "hidden" and kw["overwrites"]["bot"].view_channel is True
+    assert "overwrites" not in kw, "Discord syncs it to the category; sending overwrites can be refused"
 
     guild.text_channels = [SimpleNamespace(name="bot-logs", id=5)]  # already there (maybe moved): reused
     assert (await botlogs.ensure_channel(guild, s)).id == 5
