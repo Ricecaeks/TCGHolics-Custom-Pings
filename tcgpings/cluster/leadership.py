@@ -34,6 +34,9 @@ SCAN_MIN_HISTORY = 3  # scans needed before a drop is judged against them
 SCAN_DROP_RATIO = 0.5  # a latest scan below this share of the usual count is a drop
 SCAN_STALE_INTERVALS = 3  # no successful discovery for this many check intervals is overdue
 
+PAUSED_PREFIX = "paused:"  # issue key for newly paused checks: posted once, never "resolved"
+PAUSED_LISTED = 15  # checks named in one post; the rest are in /status
+
 
 async def lead(ctx: Context) -> None:
     bot = None
@@ -207,7 +210,7 @@ async def collect_issues(ctx: Context) -> dict[str, str]:
     now = time.time()
     for h in await queries.job_health(ctx.pool):
         last_ok = h["last_ok_at"].timestamp() if h["last_ok_at"] else None
-        if h["failing"] == h["jobs"] and (last_ok is None or now - last_ok > ADAPTER_STALE_SECONDS):
+        if h["jobs"] and h["failing"] == h["jobs"] and (last_ok is None or now - last_ok > ADAPTER_STALE_SECONDS):
             issues[f"adapter:{h['retailer_id']}"] = (
                 f"All {h['jobs']} jobs for **{h['retailer_id']}** are failing — the site may have changed or blocked us"
             )
@@ -224,7 +227,28 @@ async def collect_issues(ctx: Context) -> dict[str, str]:
     issues.update({k: v for k, v in scans.items() if f"adapter:{k.split(':', 1)[1]}" not in issues})
     if ctx.http.chain is not None:
         issues.update(await fetch_chain_issues(ctx))
+    issues.update(paused_issue(await queries.paused_jobs(ctx.pool, unreported_only=True)))
     return issues
+
+
+def describe_paused(row) -> str:
+    """One paused check: retailer, product, why (the error that paused it, minus the URL)."""
+    name = row["title"] or row["sku"] or f"job {row['id']}"
+    reason = (row["paused_reason"] or "").rsplit(": ", 1)[-1]
+    return f"`{row['retailer_id']}` {name} ({reason})"
+
+
+def paused_issue(rows) -> dict[str, str]:
+    """Product checks paused since the last health post, as one issue. Its key names the jobs, so the health
+    loop can mark them reported (see health_loop): each pause is posted once, even across restarts."""
+    if not rows:
+        return {}
+    lines = [f"• {describe_paused(r)}" for r in rows[:PAUSED_LISTED]]
+    if len(rows) > PAUSED_LISTED:
+        lines.append(f"…and {len(rows) - PAUSED_LISTED} more (see /status)")
+    head = (f"Paused {len(rows)} product check{'s' if len(rows) != 1 else ''} after {queries.PAUSE_AFTER} "
+            "blocked/not-found errors in a row. They retry once a day and resume on their own:")
+    return {PAUSED_PREFIX + ",".join(str(r["id"]) for r in rows): "\n".join([head, *lines])}
 
 
 def _span(seconds: float) -> str:
@@ -321,7 +345,15 @@ async def health_loop(ctx: Context, bot) -> None:
                 log.warning("health: %s", text)
                 if bot is not None:
                     await bot.notify_staff(f"⚠️ {text}")
+        paused = [int(i) for key in issues if key.startswith(PAUSED_PREFIX)
+                  for i in key[len(PAUSED_PREFIX):].split(",")]
+        try:
+            await queries.mark_pauses_reported(ctx.pool, paused)
+        except Exception:
+            log.exception("could not mark paused checks as reported")
         for key in active.keys() - issues.keys():
+            if key.startswith(PAUSED_PREFIX):
+                continue  # a one-off notice: there's nothing to resolve
             log.info("health resolved: %s", key)
             if bot is not None:
                 await bot.notify_staff(f"✅ Resolved: {active[key]}")

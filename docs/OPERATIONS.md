@@ -5,6 +5,7 @@
 - **`/status` in Discord:**
   - every node, with a 👑 next to the leader, when it last checked in, and its job and alert counts
   - each retailer: 🟢 healthy, 🟡 some jobs failing or overdue, 🔴 every job failing
+  - paused product checks (see "Rate limits and blocks")
   - the alert queue, database size and proxy health
 - **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, or the database passes 400 MB. It posts ✅ when the problem clears.
 - **On a node:** `docker compose -f deploy/docker-compose.yml logs -f --tail 200`
@@ -42,6 +43,7 @@ pg_restore --no-owner --no-privileges --dbname "$NEW_DATABASE_URL" data/backups/
 
 - Each retailer has a cluster-wide **requests per minute** budget (default 30), changed with `/retailer set requests_per_minute:`. Nodes behind the same public IP share the budget. Each additional IP or proxy adds capacity.
 - A 403, a 429 or a captcha page counts as **blocked**. The job backs off exponentially, up to 30 minutes.
+- **Dead product checks pause themselves.** After 20 failures in a row that are all HTTP 403 or 404, a product check is paused. Timeouts and 5xx errors never pause a check. A paused check is retried once a day and resumes on its own as soon as a retry works. Each new pause is posted once to the staff log channel, and `/status` lists every paused check with its retailer, product, reason and pause time. Discovery and search jobs are never paused.
   - If a retailer stays 🔴, first try lowering its rate.
   - Next, try `proxy_policy:pool`.
   - If neither helps, the site probably changed. Run `python -m tcgpings probe <adapter> search <query>` to see the raw failure.
