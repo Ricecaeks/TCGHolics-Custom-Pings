@@ -10,7 +10,7 @@ import discord
 from discord import app_commands
 
 from tcgpings.classify import FRANCHISE_NAMES, franchise_of
-from tcgpings.cluster.leadership import reconcile
+from tcgpings.cluster.leadership import SCAN_HISTORY, reconcile, scan_issues
 from tcgpings.context import Context
 from tcgpings.db import queries
 from tcgpings.discord import layout, setup
@@ -634,13 +634,26 @@ async def status_cmd(interaction: discord.Interaction) -> None:
         )
     lines.append("\n**Retailers**")
     now = time.time()
+    scan_rows = await queries.discover_health(ctx.pool, SCAN_HISTORY)
+    scans = {r["retailer_id"]: r for r in scan_rows}
+    warnings = scan_issues(scan_rows)
     for h in await queries.job_health(ctx.pool):
+        rid = h["retailer_id"]
         last = f"{int(now - h['last_ok_at'].timestamp())}s ago" if h["last_ok_at"] else "never"
-        icon = "🔴" if h["failing"] == h["jobs"] else ("🟡" if h["failing"] or h["overdue"] else "🟢")
+        scan_bad = any(k.split(":", 1)[1] == rid for k in warnings)
+        icon = "🔴" if h["failing"] == h["jobs"] else ("🟡" if h["failing"] or h["overdue"] or scan_bad else "🟢")
+        scan = scans.get(rid)
+        scanned = ""
+        if scan is not None and scan["products"] is not None:
+            usual = f" (usual {scan['usual']:.0f})" if scan["usual"] is not None else ""
+            scanned = f" · last scan {scan['products']} products{usual}"
         lines.append(
-            f"{icon} `{h['retailer_id']}` · {h['jobs']} jobs · {h['failing']} failing"
-            f" · {h['overdue']} overdue · last ok {last}"
+            f"{icon} `{rid}` · {h['jobs']} jobs · {h['failing']} failing"
+            f" · {h['overdue']} overdue · last ok {last}{scanned}"
         )
+    if warnings:
+        lines.append("\n**Scan warnings**")
+        lines += [f"⚠️ {text}" for text in warnings.values()]
     backlog = await queries.outbox_backlog(ctx.pool)
     size = await queries.database_size_mb(ctx.pool)
     lines.append(

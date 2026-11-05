@@ -197,8 +197,12 @@ class Worker:
                 wanted.append(product.sku)
         if adapter.store_stock_enabled:
             await self._track_discovered(adapter, wanted, routes)
-        log.debug("%s discovery: %d listed, %d sealed TCG, %d tracked per store",
-                  adapter.retailer_id, len(results), kept, len(wanted))
+        scanned = adapter.scan_size(results)
+        if scanned is not None:  # None: the adapter didn't read the site this run
+            await queries.record_discover_scan(self.ctx.pool, adapter.retailer_id, scanned, kept)
+        log.log(logging.WARNING if scanned == 0 else logging.DEBUG,
+                "%s discovery: %s products parsed, %d listed, %d sealed TCG, %d tracked per store",
+                adapter.retailer_id, "skipped" if scanned is None else scanned, len(results), kept, len(wanted))
 
     async def _track_discovered(self, adapter: Any, skus: list[str], routes: list) -> None:
         """Keep store-level jobs for discovered products that match a keyword route; drop ones that no longer do."""

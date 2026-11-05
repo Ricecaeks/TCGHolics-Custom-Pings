@@ -182,6 +182,7 @@ class PokemonCenterAdapter(RetailerAdapter):
         self._read_at = 0.0
         self._swept_at = 0.0
         self._in_stock: int | None = None
+        self._scanned: int | None = None
 
     @property
     def _chain(self):
@@ -213,6 +214,7 @@ class PokemonCenterAdapter(RetailerAdapter):
 
     async def discover(self) -> list[Product]:
         now = time.time()
+        self._scanned = None  # skipped or queued runs don't say anything about the parser
         if now - self._read_at < self.every - SLACK:
             return []
         self._read_at = now
@@ -223,6 +225,7 @@ class PokemonCenterAdapter(RetailerAdapter):
             log.info("%s: queue is on (%s)", self.retailer_id, exc)
             return [self.queue_status(True)]
         products, total, in_stock = self._parse(page, url)
+        scanned = len(products)  # page 1 only, so runs with and without a full sweep compare
         changed = in_stock is not None and self._in_stock is not None and in_stock != self._in_stock
         if changed or now - self._swept_at >= self.sweep_every - SLACK:
             pages = min(math.ceil(total / PAGE_SIZE), MAX_PAGES)
@@ -241,7 +244,11 @@ class PokemonCenterAdapter(RetailerAdapter):
             log.info("%s: read all %d pages (%d products, %s in stock%s)", self.retailer_id, pages, len(products),
                      in_stock, ", count changed" if changed else "")
         self._in_stock = in_stock
+        self._scanned = scanned
         return [*products, self.queue_status(False)]
+
+    def scan_size(self, results: list[Product]) -> int | None:
+        return self._scanned
 
     async def search(self, query: str) -> list[Product]:
         return []  # see supports_search

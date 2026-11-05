@@ -115,6 +115,7 @@ class PaperPlusAdapter(RetailerAdapter):
         super().__init__(retailer, http)
         self._listed: dict[str, Product] = {}  # last seen listing of each product still counted as listed
         self._missing: dict[str, int] = {}
+        self._scanned = 0
 
     async def discover(self) -> list[Product]:
         found: dict[str, Product] = {}
@@ -122,10 +123,14 @@ class PaperPlusAdapter(RetailerAdapter):
             resp = await self.http.get(self.policy, f"{BASE}/shop/{category}")
             for product in parse_tiles(resp.text, self.retailer_id):
                 found.setdefault(product.sku, product)
+        self._scanned = len(found)
         if not found:  # a page that lists nothing is more likely broken than sold out
             log.warning("paperplus: the categories listed no products")
             return []
         return list(found.values()) + self._left_the_listings(found)
+
+    def scan_size(self, results: list[Product]) -> int | None:
+        return self._scanned  # what the categories listed, not the sold-out rows added for ones that left
 
     def _left_the_listings(self, found: dict[str, Product]) -> list[Product]:
         """Products gone from the listings for GONE_AFTER_SCANS scans in a row, now counted as sold out."""

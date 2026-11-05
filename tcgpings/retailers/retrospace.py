@@ -150,6 +150,7 @@ class RetrospaceAdapter(RetailerAdapter):
         super().__init__(retailer, http)
         self._listed: dict[str, Product] = {}  # last seen listing of each product still in its category
         self._missing: dict[str, int] = {}
+        self._scanned = 0
 
     async def _listing(self, slug: str, count: int) -> list[Product]:
         resp = await self.http.get(self.policy, f"{BASE}/{slug}/more/", params={"start": 0, "howMany": count})
@@ -160,6 +161,7 @@ class RetrospaceAdapter(RetailerAdapter):
         for slug in self.config.get("categories") or CATEGORIES:
             for product in await self._listing(slug, CATEGORY_COUNT):
                 in_categories.setdefault(product.sku, product)
+        self._scanned = len(in_categories)
         found = dict(in_categories)
         for product in await self._listing(NEWEST, NEWEST_COUNT):
             found.setdefault(product.sku, product)
@@ -167,6 +169,9 @@ class RetrospaceAdapter(RetailerAdapter):
             log.warning("retrospace: the card categories listed no products")
             return list(found.values())
         return list(found.values()) + self._left_the_listings(in_categories)
+
+    def scan_size(self, results: list[Product]) -> int | None:
+        return self._scanned  # what the card categories listed, not the newest page or ones that left
 
     def _left_the_listings(self, found: dict[str, Product]) -> list[Product]:
         """Products gone from their category for GONE_AFTER_SCANS scans in a row, now counted as sold out."""
