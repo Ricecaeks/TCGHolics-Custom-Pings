@@ -371,6 +371,25 @@ async def apply_state(
     return prev
 
 
+async def price_seen_within(
+    conn: asyncpg.Connection, retailer_id: str, sku: str, price_cents: int, seconds: int
+) -> bool:
+    """Did this product's online price stand at `price_cents` before its latest change, within `seconds`?
+
+    Call after apply_state: the change just recorded (to this price) is one row, so any other row that
+    mentions the price means the product had it before.
+    """
+    return bool(await conn.fetchval(
+        """
+        SELECT count(*) > 1 FROM state_changes
+        WHERE retailer_id = $1 AND sku = $2 AND store_id = ''
+          AND changed_at > now() - make_interval(secs => $4)
+          AND (old_price = $3 OR new_price = $3)
+        """,
+        retailer_id, sku, price_cents, seconds,
+    ))
+
+
 async def seconds_since_store_check(db: DB, retailer_id: str, sku: str) -> float | None:
     return await db.fetchval(
         """

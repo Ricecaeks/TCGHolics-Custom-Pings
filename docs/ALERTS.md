@@ -150,7 +150,7 @@ Matching ignores case and accents ("pokemon" matches "Pokémon"). Words match fr
 | `new_product` | a product appears for the first time with stock (one listed sold out posts as a `restock` later) | on |
 | `restock` | out of stock → in stock (online or at a store) | on |
 | `qty_change` | stock goes up, or Low ↔ In | on |
-| `price_change` | online price changes while in stock | on |
+| `price_change` | online price changes while in stock (going back to a price it had in the last 24 h doesn't alert) | on |
 | `out_of_stock` | in stock → out | **off** (add `events:out_of_stock` to opt in) |
 | `queue` | a shop turns its waiting room on (Pokémon Center during big drops) | on (also in `#pokemon-online-shops`) |
 

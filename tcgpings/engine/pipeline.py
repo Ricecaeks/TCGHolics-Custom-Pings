@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 # A product announced as a new listing this recently alerts on its first in-store reading too. Store checks
 # can come hours after discovery (JB Hi-Fi, Toyworld), and a new drop is often in-store only (Kmart).
 NEW_DROP_SECONDS = 24 * 3600
+# A price the product already had this recently is a flip back (a sale toggling, or two pages of the
+# shop disagreeing), not news: the change is recorded but not alerted.
+PRICE_FLAP_SECONDS = 24 * 3600
 
 
 def classify_product(product: Product) -> Product:
@@ -72,8 +75,14 @@ class Pipeline:
                     if announced:
                         events.append(new_product_event(product))
                 changes = diff_state(product, ONLINE, None, prev, product.online, product.price_cents)
-                # Single cards reprice constantly: the change is recorded, but not worth an alert.
-                events += [e for e in changes if not (e.type is EventType.PRICE_CHANGE and is_single_card(product.title))]
+                for e in changes:
+                    if e.type is EventType.PRICE_CHANGE and (
+                        is_single_card(product.title)  # single cards reprice constantly
+                        or await queries.price_seen_within(
+                            conn, product.retailer_id, product.sku, e.new_price, PRICE_FLAP_SECONDS)
+                    ):
+                        continue  # recorded, not alerted
+                    events.append(e)
 
             for store_id, stock in (store_stock or {}).items():
                 if stock.level is Level.UNKNOWN:
