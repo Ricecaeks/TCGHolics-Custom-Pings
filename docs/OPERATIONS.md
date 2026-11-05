@@ -41,7 +41,7 @@ grep ERROR /opt/tcgpings/data/logs/bot-*.log*              # search every node a
 
 Every node's warnings and errors also go to **#bot-logs** in the Staff category, so you can read them from your phone.
 
-- The leader creates the channel in the first category whose name contains "Staff", with that category's permissions. It checks every 10 minutes and recreates the channel if it's deleted. If there's no Staff category, it makes a private one that only `STAFF_ROLE_ID` and the bot can see. You can rename or move the channel; the bot finds it by its name, `bot-logs`.
+- The leader creates the channel in the first category whose name contains "Staff", synced to that category's permissions. The bot needs View Channels, Manage Channels and Manage Webhooks in that category (add it under the category's Permissions if the category is private). It checks every 10 minutes and recreates the channel if it's deleted. If there's no Staff category, it makes a private one that only `STAFF_ROLE_ID` and the bot can see. You can rename or move the channel; the bot finds it by its name, `bot-logs`.
 - Each node posts every 30 seconds, as `logs · <node>`. Repeated lines are collapsed (`×4`). A node posts at most 3 messages at a time, and anything past that is counted ("… N more lines not posted") and left in the log file. Discord's rate limits can never slow the bot down.
 - API keys, tokens and webhook links are hidden (`***`) before posting.
 - `BOT_LOGS_LEVEL=INFO` in `.env` sends everything, which is very chatty; the default is `WARNING`. `BOT_LOGS_CATEGORY` picks another category; `BOT_LOGS_CHANNEL=` (empty) turns it off.
