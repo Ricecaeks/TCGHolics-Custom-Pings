@@ -35,6 +35,8 @@ SCAN_MIN_HISTORY = 3  # scans needed before a drop is judged against them
 SCAN_DROP_RATIO = 0.5  # a latest scan below this share of the usual count is a drop
 SCAN_STALE_INTERVALS = 3  # no successful discovery for this many check intervals is overdue
 
+QUEUE_LAG_WARN_SECONDS = 10 * 60  # the oldest due job waiting longer than this is a health issue
+
 PAUSED_PREFIX = "paused:"  # issue key for newly paused checks: posted once, never "resolved"
 PAUSED_LISTED = 15  # checks named in one post; the rest are in /status
 
@@ -215,6 +217,7 @@ async def collect_issues(ctx: Context) -> dict[str, str]:
             issues[f"adapter:{h['retailer_id']}"] = (
                 f"All {h['jobs']} jobs for **{h['retailer_id']}** are failing — the site may have changed or blocked us"
             )
+    issues.update(queue_lag_issue(await queries.queue_lag(ctx.pool)))
     backlog = await queries.outbox_backlog(ctx.pool)
     if backlog["dead"]:
         issues["outbox:dead"] = f"{backlog['dead']} alerts could not be delivered (check webhooks)"
@@ -230,6 +233,17 @@ async def collect_issues(ctx: Context) -> dict[str, str]:
         issues.update(await fetch_chain_issues(ctx))
     issues.update(paused_issue(await queries.paused_jobs(ctx.pool, unreported_only=True)))
     return issues
+
+
+def queue_lag_issue(lag) -> dict[str, str]:
+    """The job queue running behind: the longest-waiting due job is over QUEUE_LAG_WARN_SECONDS late.
+    One issue for the whole queue, keyed so it's posted once and resolved once the workers catch up."""
+    if lag is None or lag["worst_seconds"] <= QUEUE_LAG_WARN_SECONDS:
+        return {}
+    return {"queue:lag": (
+        f"Checks are running behind: {lag['overdue']} due jobs are over {queries.QUEUE_LAG_SECONDS // 60} min late, "
+        f"the oldest by {_span(lag['worst_seconds'])}. The workers can't keep up (see /status)"
+    )}
 
 
 def describe_paused(row) -> str:

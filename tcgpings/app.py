@@ -6,9 +6,11 @@ import asyncio
 import contextlib
 import logging
 import signal
+from collections.abc import Coroutine
 
 from tcgpings import __version__
 from tcgpings.cluster.heartbeat import beat, heartbeat_loop, lookup_egress_ip
+from tcgpings.cluster.lanes import LANES
 from tcgpings.cluster.leader import LeaderElector
 from tcgpings.cluster.leadership import lead
 from tcgpings.cluster.worker import Worker
@@ -91,6 +93,19 @@ async def seed_retailers(ctx: Context) -> None:
             )
 
 
+def node_tasks(ctx: Context, worker: Worker) -> list[tuple[Coroutine, str]]:
+    """What this node runs. Every node beats, works its lanes and sends alerts (the outbox is leased, so
+    senders on several nodes never post the same alert); only leader-eligible nodes stand for leader."""
+    tasks: list[tuple[Coroutine, str]] = [
+        (heartbeat_loop(ctx), "heartbeat"),
+        (worker.run(), "worker"),
+        (sender_loop(ctx), "sender"),
+    ]
+    if ctx.settings.leader_eligible:
+        tasks.append((LeaderElector(ctx, lambda: lead(ctx)).run(), "elector"))
+    return tasks
+
+
 async def run(settings: Settings) -> None:
     ctx = await build_context(settings)
     try:
@@ -102,18 +117,16 @@ async def run(settings: Settings) -> None:
         ctx.egress_ip = settings.egress_ip or await lookup_egress_ip(settings.egress_lookup_url)
         await beat(ctx)
         log.info(
-            "node %s v%s started (egress %s%s)",
-            ctx.node_name, __version__, ctx.egress_ip or "unknown", ", DRY RUN" if settings.dry_run else "",
+            "node %s v%s started (egress %s, lanes %s, %s%s)",
+            ctx.node_name, __version__, ctx.egress_ip or "unknown", ",".join(settings.lanes) or "none",
+            "may lead" if settings.leader_eligible else "never leads", ", DRY RUN" if settings.dry_run else "",
         )
+        unknown = [lane for lane in settings.lanes if lane not in LANES]
+        if unknown:
+            log.warning("WORKER_LANES has unknown lanes %s (known: %s)", unknown, ", ".join(LANES))
 
         worker = Worker(ctx)
-        elector = LeaderElector(ctx, lambda: lead(ctx))
-        tasks = [
-            asyncio.create_task(heartbeat_loop(ctx), name="heartbeat"),
-            asyncio.create_task(worker.run(), name="worker"),
-            asyncio.create_task(sender_loop(ctx), name="sender"),
-            asyncio.create_task(elector.run(), name="elector"),
-        ]
+        tasks = [asyncio.create_task(t, name=name) for t, name in node_tasks(ctx, worker)]
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):

@@ -1,9 +1,18 @@
+import os
 import re
 import socket
 from functools import lru_cache
+from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from tcgpings.cluster.lanes import parse_lanes
+
+
+def safe_name(name: str) -> str:
+    """A node name made safe for a file name (bot-<name>.log, heartbeat-<name>)."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._") or "node"
 
 
 class Settings(BaseSettings):
@@ -58,6 +67,14 @@ class Settings(BaseSettings):
     unblocker_block_cooldown: int = 3600
 
     worker_concurrency: int = 8
+    # Which jobs this node claims (tcgpings/cluster/lanes.py): "http" (plain requests), "browser" (Chrome and
+    # the paid unblockers), both, or none (empty), e.g. a node that only leads and sends alerts.
+    worker_lanes: str = "http,browser"
+    # A retailer with this many jobs running anywhere in the cluster gets no more until one finishes, so one
+    # slow store can't fill every worker slot.
+    max_inflight_per_retailer: int = 3
+    # False: this node never runs the leader's tasks (Discord bot, planner, health posts, backups).
+    leader_eligible: bool = True
     lease_seconds: int = 120
     heartbeat_seconds: int = 15
     node_stale_seconds: int = 60
@@ -94,9 +111,25 @@ class Settings(BaseSettings):
     log_file_max_mb: int = 25
     log_file_keep: int = 7
 
+    @model_validator(mode="after")
+    def _empty_lanes_mean_none(self) -> "Settings":
+        # env_ignore_empty would turn `WORKER_LANES=` into the default; for this setting empty means "no lanes".
+        if "worker_lanes" not in self.model_fields_set and os.environ.get("WORKER_LANES") == "":
+            self.worker_lanes = ""
+        return self
+
     @property
     def proxies(self) -> list[str]:
         return [p for p in re.split(r"[\s,]+", self.proxy_urls) if p]
+
+    @property
+    def health_file(self) -> Path:
+        """This node's healthcheck file. Containers on one machine share data/, so each has its own."""
+        return Path(self.data_dir) / f"heartbeat-{safe_name(self.node_name)}"
+
+    @property
+    def lanes(self) -> list[str]:
+        return parse_lanes(self.worker_lanes)
 
 
 @lru_cache
