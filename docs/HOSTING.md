@@ -33,7 +33,7 @@ The bot runs on the NUC (Intel i5-5250U, 2 cores / 4 threads, 16 GB RAM, AlmaLin
 - `tcgpings-db-1`: Postgres 17, data in the `tcgpings_pgdata` volume. 2 GB memory cap.
 - `tcgpings-control-1` (node `nuc-control`): the leader (Discord bot, job planner, channel layout, health posts, nightly backup) and an alert sender. Claims no jobs (`WORKER_LANES=` empty). 1 GB.
 - `tcgpings-worker-http-1` (node `nuc-http`): jobs for the plain-HTTP stores (Shopify shops, JB Hi-Fi, Paper Plus, ...), 32 at a time. Never leads; no Chrome. 1.5 GB.
-- `tcgpings-worker-browser-1` (node `nuc-browser`): jobs for the stores that need Chrome or the paid unblockers (Farmers, Kmart, Mighty Ape, Pokémon Center, The Warehouse), 4 at a time. Never leads. 3 GB, 1 GB shared memory for Chrome.
+- `tcgpings-worker-browser-1` (node `nuc-browser`): jobs for the stores that need Chrome or the paid unblockers (Farmers, Kmart, Mighty Ape, Pokémon Center, The Warehouse), 6 at a time (still at most 3 for any one store). Never leads. 3 GB, 1 GB shared memory for Chrome.
 
 That's 7.5 GB of memory caps out of 16 GB. Every bot container also sends alerts. A store never has more than 3 jobs running at once (`MAX_INFLIGHT_PER_RETAILER`), so one slow store can't hold every slot. To add HTTP capacity, see the comment at the top of the compose file (`--scale worker-http=2`).
 

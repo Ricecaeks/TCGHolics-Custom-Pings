@@ -11,7 +11,7 @@ Monitors NZ retailers for TCG products (Pokémon, One Piece, Riftbound, MTG, Lor
  ┌─────────────────────────────────────────────────────────────┐
  │  control         leader: bot, planner, health, backups  ────┼──> Discord bot (slash commands)
  │  worker-http     plain-HTTP stores, 32 jobs at once         │
- │  worker-browser  Chrome / unblocker stores, 4 jobs at once  │
+ │  worker-browser  Chrome / unblocker stores, 6 jobs at once  │
  │        │  all three send alerts  ───────────────────────────┼──> Discord webhooks (#farmers-instore, ...)
  │        ▼                                                    │
  │  db              Postgres 17: jobs, state, alert outbox     │
