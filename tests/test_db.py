@@ -339,7 +339,7 @@ async def test_sold_out_listings_and_their_price_changes_stay_quiet(pool):
     await pipe.record(RETAILER, product(Level.OUT, 9999))
     assert await outbox(pool) == []
     await pipe.record(RETAILER, product(Level.IN, 9999))
-    await pipe.record(RETAILER, product(Level.IN, 8999))
+    await pipe.record(RETAILER, product(Level.IN, 7999))
     assert [r["payload"]["type"] for r in await outbox(pool)] == ["restock", "price_change"]
 
 
@@ -354,3 +354,17 @@ async def test_a_listing_without_stock_info_posts_when_stock_shows(pool):
     assert (event.type.value, event.new_level) == ("new_product", "in")
     assert [r["payload"]["type"] for r in await outbox(pool)] == ["new_product"]
     assert await pipe.record(RETAILER, checked) == []
+
+
+async def test_a_price_flipping_back_and_forth_alerts_once(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=900)
+    await pipe.record(RETAILER, product(price=14999))
+    for price in (7499, 14999, 7499, 14999, 7499):  # a sale toggling, or two pages disagreeing
+        await pipe.record(RETAILER, product(price=price))
+    alerts = await outbox(pool)
+    assert [(r["payload"]["type"], r["payload"]["new_price"]) for r in alerts] == [("price_change", 7499)]
+    # every flip is still recorded, and a genuinely new price alerts again
+    assert await pool.fetchval("SELECT price_cents FROM product_state WHERE sku = 'bundle'") == 7499
+    [new] = await pipe.record(RETAILER, product(price=5999))
+    assert (new.type.value, new.new_price) == ("price_change", 5999)
