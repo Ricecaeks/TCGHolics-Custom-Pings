@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     lease_seconds: int = 120
     heartbeat_seconds: int = 15
     node_stale_seconds: int = 60
+    node_forget_seconds: int = 3600  # a node silent this long is removed from the list (and the warnings)
     leader_lock_key: int = 72_4242_01
 
     # Sends every alert to this one webhook (a catch-all route), e.g. a beta channel. Works without the bot.

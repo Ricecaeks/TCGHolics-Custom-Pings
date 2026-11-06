@@ -550,6 +550,38 @@ async def price_seen_within(
     ))
 
 
+async def restock_flicker(
+    conn: asyncpg.Connection, retailer_id: str, sku: str, store_id: str, out_seconds: int, repeat_seconds: int
+) -> bool:
+    """Did this product just come back after being out for under `out_seconds`, having already restocked at
+    this location within `repeat_seconds`?
+
+    Call after apply_state: the restock just recorded is the newest row, so a second restock in the window
+    means an earlier one, and the sell-out it ends is the newest in-to-out change.
+    """
+    return bool(await conn.fetchval(
+        """
+        WITH c AS (
+            SELECT changed_at, old_level IN ('in', 'low') AS was_in, new_level IN ('in', 'low') AS now_in
+            FROM state_changes
+            WHERE retailer_id = $1 AND sku = $2 AND store_id = $3
+              AND changed_at > now() - make_interval(secs => greatest($4::int, $5::int))
+        )
+        SELECT (SELECT count(*) FROM c WHERE NOT was_in AND now_in
+                  AND changed_at > now() - make_interval(secs => $5)) > 1
+           AND (SELECT max(changed_at) FROM c WHERE was_in AND NOT now_in) > now() - make_interval(secs => $4)
+        """,
+        retailer_id, sku, store_id, out_seconds, repeat_seconds,
+    ))
+
+
+async def forget_nodes(db: DB, seconds: int) -> list[str]:
+    """Remove nodes that haven't checked in for `seconds`; a node that comes back re-registers itself."""
+    rows = await db.fetch(
+        "DELETE FROM nodes WHERE last_heartbeat < now() - make_interval(secs => $1) RETURNING name", seconds)
+    return sorted(r["name"] for r in rows)
+
+
 async def seconds_since_store_check(db: DB, retailer_id: str, sku: str) -> float | None:
     return await db.fetchval(
         """
