@@ -55,7 +55,16 @@ Merge to `main`. CI runs the tests, then `deploy.yml` rebuilds and restarts the 
 
 ## Backups
 
-The leader writes `data/backups/tcgpings-<timestamp>.dump` once a day and keeps the newest 7. On the NUC that's `/opt/tcgpings/data/backups/`. Copy them somewhere off-site if you can.
+The leader writes `data/backups/tcgpings-<timestamp>.dump` once a day and keeps the newest 7. On the NUC that's `/opt/tcgpings/data/backups/`.
+
+Off-site copies: every night at 03:40 NZ time, `.github/workflows/offsite-backup.yml` runs on the NUC. It checks the newest dump is under 26 hours old and that `pg_restore` can read it. Then it pushes it to the **private** repo `Ricecaeks/tcgpings-backups` as `daily/tcgpings-YYYYMMDD.dump`, keeping the last 30 days. Each push is a single commit, so days it drops are gone from history too. It pushes with a deploy key that only exists on the NUC (`/opt/tcgpings/backup-deploy-key`, owner `admin`, mode 600) and only has write access to that one repo. A failed run emails you like any failed workflow. Run it by hand from Actions → offsite-backup → Run workflow.
+
+If the NUC is lost, get a dump back on the new machine with `gh repo clone Ricecaeks/tcgpings-backups` (or download the file from github.com) and restore it as below. If you rebuild the NUC, make a new key and add it to the backups repo as a write deploy key:
+
+```bash
+ssh-keygen -t ed25519 -N "" -C tcgpings-nuc-backup -f /opt/tcgpings/backup-deploy-key
+gh repo deploy-key add /opt/tcgpings/backup-deploy-key.pub -R Ricecaeks/tcgpings-backups -w -t "NUC nightly backup"
+```
 
 To restore into the NUC's database (stop the bot first: `docker stop tcgpings-control-1 tcgpings-worker-http-1 tcgpings-worker-browser-1`):
 

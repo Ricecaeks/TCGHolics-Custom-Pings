@@ -1,0 +1,80 @@
+# Copies the newest database backup off the NUC into the private repo Ricecaeks/tcgpings-backups,
+# so a dead disk doesn't take the only copies with it. Runs on the NUC itself: the backups never pass
+# through GitHub's runners or this (public) repo's artifacts.
+#
+# Pushes with a write-only deploy key that lives only on the NUC ($TCGPINGS_HOME/backup-deploy-key)
+# and only has access to the backups repo. Keeps one dump per day for the last KEEP_DAYS days. Each
+# night's push replaces the repo's history with a single commit, so deleted days are really gone.
+name: offsite-backup
+
+on:
+  schedule:
+    - cron: "40 14 * * *" # 03:40 NZDT
+  workflow_dispatch:
+
+concurrency: offsite-backup
+
+permissions: {}
+
+jobs:
+  copy:
+    runs-on: [self-hosted, tcgpings-nuc]
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      TCGPINGS_HOME: ${{ vars.TCGPINGS_HOME }}
+      BACKUP_REPO: git@github.com:Ricecaeks/tcgpings-backups.git
+      KEEP_DAYS: "30"
+    steps:
+      - name: Find and check the newest backup
+        run: |
+          set -euo pipefail
+          test -n "$TCGPINGS_HOME" || { echo "::error::Set the TCGPINGS_HOME repository variable"; exit 1; }
+          latest=$(ls -1t "$TCGPINGS_HOME"/data/backups/tcgpings-*.dump 2>/dev/null | head -n1 || true)
+          [ -n "$latest" ] || { echo "::error::No backups found in $TCGPINGS_HOME/data/backups"; exit 1; }
+          age_h=$(( ( $(date +%s) - $(stat -c %Y "$latest") ) / 3600 ))
+          echo "Newest backup: $(basename "$latest"), ${age_h}h old, $(stat -c %s "$latest") bytes"
+          [ "$age_h" -lt 26 ] || { echo "::error::The newest backup is ${age_h}h old; the leader's daily backup isn't running"; exit 1; }
+          # A dump pg_restore can't read is worse than none: it would push out a good day.
+          docker exec -i tcgpings-db-1 pg_restore --list < "$latest" > /dev/null \
+            || { echo "::error::pg_restore can't read $(basename "$latest")"; exit 1; }
+          echo "LATEST=$latest" >> "$GITHUB_ENV"
+
+      - name: Push it to the backups repo
+        run: |
+          set -euo pipefail
+          key="$TCGPINGS_HOME/backup-deploy-key"
+          [ -r "$key" ] || { echo "::error::Missing $key (see docs/OPERATIONS.md, Backups)"; exit 1; }
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          # Pin GitHub's published SSH host key instead of trusting whatever answers first.
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$work/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$work/known_hosts -o StrictHostKeyChecking=yes"
+
+          git clone -q --depth 1 "$BACKUP_REPO" "$work/repo" 2>&1 | grep -v 'empty repository' || true
+          [ -d "$work/repo/.git" ] || { echo "::error::Couldn't clone $BACKUP_REPO"; exit 1; }
+          cd "$work/repo"
+          mkdir -p daily
+
+          # tcgpings-YYYYMMDD-HHMMSS.dump -> daily/tcgpings-YYYYMMDD.dump (the day's newest wins).
+          day=$(basename "$LATEST" | sed -E 's/^tcgpings-([0-9]{8})-.*/\1/')
+          cp "$LATEST" "daily/tcgpings-$day.dump"
+          cutoff=$(date -d "-$KEEP_DAYS days" +%Y%m%d)
+          for f in daily/tcgpings-*.dump; do
+            d=$(basename "$f" .dump); d=${d#tcgpings-}
+            [ "$d" -ge "$cutoff" ] || { echo "Dropping $f"; rm -f "$f"; }
+          done
+          printf '%s\n' \
+            "# TCGHolics Pings backups" "" \
+            "Nightly pg_dump copies from the NUC, one per day for the last $KEEP_DAYS days." \
+            "Restore steps: docs/OPERATIONS.md (Backups) in Ricecaeks/TCGHolics-Custom-Pings." > README.md
+
+          # One commit, force-pushed: old days dropped above leave no copy in history.
+          git checkout -q --orphan snapshot
+          git add -A
+          git -c user.name="tcgpings-nuc" -c user.email="tcgpings-nuc@users.noreply.github.com" \
+            commit -q -m "Backups up to $day"
+          git push -q --force origin snapshot:main
+          echo "Pushed. Days kept:"; ls -1 daily
