@@ -8,7 +8,7 @@
   - each retailer: 🟢 healthy, 🟡 some jobs failing or overdue, 🔴 every job failing
   - paused product checks (see "Rate limits and blocks")
   - the alert queue, database size and proxy health
-- **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, the job queue's oldest due job has waited over 10 minutes, or the database passes 400 MB. It posts ✅ when the problem clears.
+- **Staff log channel (`LOG_CHANNEL_ID`):** the leader posts ⚠️ when a node stops checking in, a retailer's jobs all fail for 30 minutes, alerts can't be delivered, the job queue's oldest due job has waited over 10 minutes, or the database passes 400 MB. It posts ✅ when the problem clears. A node that hasn't checked in for an hour (`NODE_FORGET_SECONDS`) is removed from the node list with a 🗑️ note instead; it re-registers on its own if it starts again.
 - **On a node:** see [Logs](#logs).
 - **From any machine with `.env`:** `python -m tcgpings admin show` dumps retailers, watches, routes, nodes and job health.
 - **Heartbeat (NUC):** every 15 minutes [`heartbeat.yml`](../.github/workflows/heartbeat.yml) checks that every container of the stack is healthy, that some job succeeded in the last 15 minutes, that no alert has sat unsent for over 15 minutes, and that jobs at no more than one store have waited over 20 minutes for a worker (one slow store alone shows as a warning in the run, not a failure). Alerts that gave up after 8 tries don't count; the log channel already warns about those. A failed run emails you, and after an hour of failures `watchdog.yml` posts "Stock alerts are offline" in Discord. The run's log says which check failed.
@@ -108,6 +108,10 @@ Settings per container (set in `deploy/docker-compose.nuc.yml`, which overrides 
 Each retailer has one keyword-search job (`search:<retailer>`) that runs all its keyword watches. It runs as often as the fastest of those watches, so a short `interval:` on one keyword watch makes every keyword at that retailer run that often. If one keyword's search fails, the others are still recorded; the job only shows as failing when every keyword failed. A keyword added to a retailer whose search job has already run gets its own silent baseline on its first run, as before.
 
 Repeat alerts for the same product, store and state are suppressed for 15 minutes (`ALERT_COOLDOWN_SECONDS`), so stock flickering in and out doesn't spam channels.
+
+Two longer-range filters catch flicker that outlasts the cooldown (both in `tcgpings/engine/pipeline.py`). The change is still recorded; only the ping is skipped.
+- **Prices:** a price the product already had in the last 24 hours (a sale toggling, or two pages of the shop disagreeing) doesn't ping again.
+- **Restocks:** a product that comes back within an hour of selling out, and already restocked at that store (or online) in the last 6 hours, doesn't ping again. The first restock always pings, and so does one after a real sell-out of over an hour.
 
 ## Moving to the cloud
 

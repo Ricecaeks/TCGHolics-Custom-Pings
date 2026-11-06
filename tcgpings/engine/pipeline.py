@@ -27,6 +27,12 @@ NEW_DROP_SECONDS = 24 * 3600
 # A price the product already had this recently is a flip back (a sale toggling, or two pages of the
 # shop disagreeing), not news: the change is recorded but not alerted.
 PRICE_FLAP_SECONDS = 24 * 3600
+# A restock that comes back within RESTOCK_FLICKER_SECONDS of selling out, when the product already restocked
+# at that location in the last RESTOCK_REPEAT_SECONDS, is stock flickering (two pages of the shop disagreeing,
+# a cache flipping), not news: the change is recorded but not alerted. The first restock always pings, and so
+# does one after a real sell-out (out for longer than RESTOCK_FLICKER_SECONDS).
+RESTOCK_FLICKER_SECONDS = 60 * 60
+RESTOCK_REPEAT_SECONDS = 6 * 3600
 
 
 def classify_product(product: Product) -> Product:
@@ -35,6 +41,14 @@ def classify_product(product: Product) -> Product:
         product.franchise = product.franchise or franchise
         product.ptype = product.ptype or ptype
     return product
+
+
+async def _restock_flicker(conn: asyncpg.Connection, event: Event) -> bool:
+    """Is this restock stock flickering rather than news? See RESTOCK_FLICKER_SECONDS."""
+    if event.type is not EventType.RESTOCK:
+        return False
+    return await queries.restock_flicker(
+        conn, event.retailer_id, event.sku, event.store_id or "", RESTOCK_FLICKER_SECONDS, RESTOCK_REPEAT_SECONDS)
 
 
 class Pipeline:
@@ -82,6 +96,8 @@ class Pipeline:
                             conn, product.retailer_id, product.sku, e.new_price, PRICE_FLAP_SECONDS)
                     ):
                         continue  # recorded, not alerted
+                    if await _restock_flicker(conn, e):
+                        continue  # recorded, not alerted
                     events.append(e)
 
             for store_id, stock in (store_stock or {}).items():
@@ -98,7 +114,8 @@ class Pipeline:
                     if announced:
                         events.append(first_store_stock_event(product, store_id, name, stock))
                     continue
-                events += diff_state(product, store_id, name, prev, stock, None)
+                events += [e for e in diff_state(product, store_id, name, prev, stock, None)
+                           if not await _restock_flicker(conn, e)]
 
             if events:
                 await self._enqueue(conn, retailer, events)

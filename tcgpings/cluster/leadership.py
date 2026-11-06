@@ -368,6 +368,16 @@ async def health_loop(ctx: Context, bot) -> None:
     while True:
         await asyncio.sleep(HEALTH_SECONDS)
         try:
+            for name in await queries.forget_nodes(ctx.pool, ctx.settings.node_forget_seconds):
+                active.pop(f"node:{name}", None)  # gone, not fixed: no "Resolved" for it
+                text = (f"Node **{name}** hasn't checked in for over {_span(ctx.settings.node_forget_seconds)}, "
+                        "so it's been removed from the node list. It rejoins on its own if it starts again")
+                log.warning("health: %s", text)
+                if bot is not None:
+                    await bot.notify_staff(f"🗑️ {text}")
+        except Exception:
+            log.exception("could not forget silent nodes")
+        try:
             issues = await collect_issues(ctx)
         except Exception:
             log.exception("health check failed")

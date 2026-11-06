@@ -399,3 +399,36 @@ async def test_a_price_flipping_back_and_forth_alerts_once(pool):
     assert await pool.fetchval("SELECT price_cents FROM product_state WHERE sku = 'bundle'") == 7499
     [new] = await pipe.record(RETAILER, product(price=5999))
     assert (new.type.value, new.new_price) == ("price_change", 5999)
+
+
+async def test_flickering_restocks_ping_once_but_a_real_sell_out_pings_again(pool):
+    await seed(pool, routes=[{}])
+    pipe = Pipeline(pool, RouteCache(pool), cooldown_seconds=1)
+
+    async def restocks(level, stores=None):
+        events = await pipe.record(RETAILER, product(level), store_stock=stores)
+        return [(e.type.value, e.store_id) for e in events if e.type.value == "restock"]
+
+    await restocks(Level.OUT, {"s1": Stock(Level.OUT)})
+    assert await restocks(Level.IN, {"s1": Stock(Level.IN)}) == [("restock", ""), ("restock", "s1")]
+    for _ in range(3):  # two pages of the shop disagreeing: out for a minute, back again
+        await restocks(Level.OUT, {"s1": Stock(Level.OUT)})
+        assert await restocks(Level.IN, {"s1": Stock(Level.IN)}) == []
+    # a real sell-out: out for two hours, then back
+    await restocks(Level.OUT, {"s1": Stock(Level.OUT)})
+    await pool.execute("UPDATE state_changes SET changed_at = changed_at - interval '2 hours' "
+                       "WHERE old_level = 'in' AND new_level = 'out' AND changed_at > now() - interval '1 minute'")
+    assert await restocks(Level.IN, {"s1": Stock(Level.IN)}) == [("restock", ""), ("restock", "s1")]
+    # the flicker only applies within the repeat window: hours after the last restock, a quick one pings
+    await restocks(Level.OUT)
+    await pool.execute("UPDATE state_changes SET changed_at = changed_at - interval '7 hours' "
+                       "WHERE store_id = '' AND new_level = 'in'")
+    assert await restocks(Level.IN) == [("restock", "")]
+
+
+async def test_forget_nodes_removes_only_silent_ones(pool):
+    for name in ("alive", "gone"):
+        await pool.execute("INSERT INTO nodes (name, version) VALUES ($1, 'test') ON CONFLICT DO NOTHING", name)
+    await pool.execute("UPDATE nodes SET last_heartbeat = now() - interval '2 hours' WHERE name = 'gone'")
+    assert await queries.forget_nodes(pool, 3600) == ["gone"]
+    assert [r["name"] for r in await queries.list_nodes(pool)] == ["alive"]
